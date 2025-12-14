@@ -122,7 +122,7 @@ class exec_button(bpy.types.Operator):
             with open(self.script_path, "r") as f:
                 code = f.read()
             exec(code, {"bpy": bpy})
-            self.report({'INFO'}, f"Executed script: {self.script_path}")
+#            self.report({'INFO'}, f"Executed script: {self.script_path}")
         except Exception as e:
             self.report({'ERROR'}, f"Execution failed: {e}")
             return {'CANCELLED'}
