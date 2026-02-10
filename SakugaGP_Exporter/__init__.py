@@ -1,5 +1,5 @@
 bl_info = {
-    "name" : "SakugaGP - Grease Pencil Exporter",
+    "name" : "SakugaGP - Exporter",
     "author" : "Sadewoo (Spikysaurus)", 
     "description" : "Exporter",
     "blender" : (5, 0, 0),
@@ -170,44 +170,15 @@ class SNA_PT_menu_6D4CE(bpy.types.Panel):
         col_8ED43.scale_y = 1.0
         col_8ED43.alignment = 'Expand'.upper()
         col_8ED43.operator_context = "INVOKE_DEFAULT" if True else "EXEC_DEFAULT"
-        op = col_8ED43.operator('wm.render_layer_keyframes_default_ec843', text='Render Current Layer', icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
-        op = col_8ED43.operator('wm.render_layer_keyframes_svg_3543e', text='Render Current (SVG)', icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
-        op = col_8ED43.operator('wm.open_output_folder_ac060', text='Open Output Folder', icon_value=string_to_icon('FILE_FOLDER'), emboss=True, depress=False)
-        box_CFE72 = box_A9121.box()
-        box_CFE72.alert = False
-        box_CFE72.enabled = True
-        box_CFE72.active = True
-        box_CFE72.use_property_split = False
-        box_CFE72.use_property_decorate = False
-        box_CFE72.alignment = 'Expand'.upper()
-        box_CFE72.scale_x = 1.0
-        box_CFE72.scale_y = 1.0
-        if not True: box_CFE72.operator_context = "EXEC_DEFAULT"
-        col_E0D27 = box_CFE72.column(heading='', align=True)
-        col_E0D27.alert = False
-        col_E0D27.enabled = True
-        col_E0D27.active = True
-        col_E0D27.use_property_split = False
-        col_E0D27.use_property_decorate = False
-        col_E0D27.scale_x = 1.0
-        col_E0D27.scale_y = 1.0
-        col_E0D27.alignment = 'Expand'.upper()
-        col_E0D27.operator_context = "INVOKE_DEFAULT" if True else "EXEC_DEFAULT"
-        col_FFDD1 = col_E0D27.column(heading='', align=True)
-        col_FFDD1.alert = True
-        col_FFDD1.enabled = True
-        col_FFDD1.active = True
-        col_FFDD1.use_property_split = False
-        col_FFDD1.use_property_decorate = False
-        col_FFDD1.scale_x = 1.0
-        col_FFDD1.scale_y = 1.0
-        col_FFDD1.alignment = 'Expand'.upper()
-        col_FFDD1.operator_context = "INVOKE_DEFAULT" if True else "EXEC_DEFAULT"
-        col_FFDD1.prop(bpy.context.scene, 'sna_type_which_gp_to_renderexport', text='', icon_value=string_to_icon('OUTLINER_DATA_GREASEPENCIL'), emboss=True)
-#        col_E0D27.prop(bpy.context.scene, 'sna_skip_extreme_type', text='Skip Extreme Keyframe', icon_value=0, emboss=True)
         GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
-        op = col_E0D27.operator('wm.render_all_keyframes__b07bc', text=str('Render '+'('+GPData+')'), icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
-        op = col_E0D27.operator('wm.export_xdts_457ec', text='Export XDTS', icon_value=string_to_icon('SPREADSHEET'), emboss=True, depress=False)
+        col_8ED43.prop(bpy.context.scene, 'sna_type_which_gp_to_renderexport', text='', icon_value=string_to_icon('OUTLINER_DATA_GREASEPENCIL'), emboss=True)
+        op = col_8ED43.operator('wm.render_all_keyframes__b07bc', text=str('Render '+'('+GPData+')'), icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
+        op = col_8ED43.operator('wm.render_layer_keyframes_default_ec843', text='Render Current Layer', icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
+        op = col_8ED43.operator('wm.export_xdts_457ec', text='Export XDTS', icon_value=string_to_icon('SPREADSHEET'), emboss=True, depress=False)
+        
+#        op = col_8ED43.operator('wm.render_layer_keyframes_svg_3543e', text='Render Current (SVG)', icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
+#        op = col_8ED43.operator('wm.open_output_folder_ac060', text='Open Output Folder', icon_value=string_to_icon('FILE_FOLDER'), emboss=True, depress=False)
+#        col_E0D27.prop(bpy.context.scene, 'sna_skip_extreme_type', text='Skip Extreme Keyframe', icon_value=0, emboss=True)
 #        op = col_E0D27.operator('wm.export_opentoonz_647d7', text='Export Opentoonz', icon_value=string_to_icon('BRUSHES_ALL'), emboss=True, depress=False)
 #        op = col_E0D27.operator('wm.open_output_folder001_5d731', text='Open Output Folder', icon_value=string_to_icon('FILE_FOLDER'), emboss=True, depress=False)
 
@@ -226,6 +197,7 @@ class SNA_OT_Set_To_Mp4_4Fc1E(bpy.types.Operator):
 
     def execute(self, context):
         sc = bpy.context.scene
+        sc.render.image_settings.media_type = "VIDEO"
         sc.render.ffmpeg.format = "MPEG4"
         sc.render.ffmpeg.codec = "H264"
         sc.render.ffmpeg.audio_codec = "AAC"
@@ -251,6 +223,7 @@ class SNA_OT_Set_To_Mov_4C792(bpy.types.Operator):
 
     def execute(self, context):
         sc = bpy.context.scene
+        sc.render.image_settings.media_type = "VIDEO"
         sc.render.ffmpeg.format = "QUICKTIME"
         sc.render.ffmpeg.codec = "QTRLE"
         if sc.render.film_transparent == True:
@@ -279,6 +252,7 @@ class SNA_OT_Set_To_Png_9C466(bpy.types.Operator):
 
     def execute(self, context):
         sc = bpy.context.scene
+        sc.render.image_settings.media_type = "IMAGE"
         sc.render.image_settings.file_format = "PNG"
         if sc.render.film_transparent == True:
             sc.render.image_settings.color_mode = "RGBA"
@@ -307,6 +281,7 @@ class SNA_OT_Render_Layer_Keyframes_Default_Ec843(bpy.types.Operator):
         str_filename = bpy.context.scene.sna_frame_number_filenames
         frames = []
         scene = bpy.context.scene
+        scene.render.image_settings.media_type = "IMAGE"
         obj = bpy.context.object
         frmt = scene.render.image_settings.file_format
         fp = scene.render.filepath  # Get existing output path
@@ -394,7 +369,7 @@ class SNA_OT_Export_Xdts_457Ec(bpy.types.Operator):
         gg = -1
         for l in layers:
             gg += 1
-            for g in bpy.data.grease_pencils_v3:
+            for g in bpy.data.grease_pencils:
                 if g.name == str(l):
                     _tf = {"trackNo":int(gg)}
                     _tf["frames"] = []
@@ -531,6 +506,7 @@ class SNA_OT_Set_To_Tga_Fd0A3(bpy.types.Operator):
 
     def execute(self, context):
         sc = bpy.context.scene
+        sc.render.image_settings.media_type = "IMAGE"
         sc.render.image_settings.file_format = "TARGA"
         if sc.render.film_transparent == True:
             sc.render.image_settings.color_mode = "RGBA"
@@ -708,6 +684,7 @@ class SNA_OT_Set_To_Jpg_67847(bpy.types.Operator):
 
     def execute(self, context):
         sc = bpy.context.scene
+        sc.render.image_settings.media_type = "IMAGE"
         sc.render.image_settings.file_format = "JPEG"
         if sc.render.film_transparent == True:
             sc.render.image_settings.color_mode = "RGB"
@@ -1783,7 +1760,7 @@ def register():
     bpy.utils.register_class(SNA_OT_Set_To_Png_9C466)
     bpy.utils.register_class(SNA_OT_Render_Layer_Keyframes_Default_Ec843)
     bpy.utils.register_class(SNA_OT_Export_Xdts_457Ec)
-    bpy.utils.register_class(SNA_OT_Render_Layer_Keyframes_Svg_3543E)
+#    bpy.utils.register_class(SNA_OT_Render_Layer_Keyframes_Svg_3543E)
     bpy.utils.register_class(SNA_OT_Set_To_Tga_Fd0A3)
     bpy.utils.register_class(SNA_OT_Render_All_Keyframes__B07Bc)
     bpy.utils.register_class(SNA_OT_Add_Antialiasing_B88D6)
@@ -1814,7 +1791,7 @@ def unregister():
     bpy.utils.unregister_class(SNA_OT_Set_To_Png_9C466)
     bpy.utils.unregister_class(SNA_OT_Render_Layer_Keyframes_Default_Ec843)
     bpy.utils.unregister_class(SNA_OT_Export_Xdts_457Ec)
-    bpy.utils.unregister_class(SNA_OT_Render_Layer_Keyframes_Svg_3543E)
+#    bpy.utils.unregister_class(SNA_OT_Render_Layer_Keyframes_Svg_3543E)
     bpy.utils.unregister_class(SNA_OT_Set_To_Tga_Fd0A3)
     bpy.utils.unregister_class(SNA_OT_Render_All_Keyframes__B07Bc)
     bpy.utils.unregister_class(SNA_OT_Add_Antialiasing_B88D6)
