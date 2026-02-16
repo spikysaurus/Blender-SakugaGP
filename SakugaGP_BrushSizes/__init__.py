@@ -3,7 +3,7 @@ bl_info = {
     "author" : "Sadewoo (Spikysaurus)", 
     "description" : "Brush Sizes Palette for Grease Pencil",
     "blender" : (5, 0, 0),
-    "version" : (0, 0, 0),
+    "version" : (0, 0, 2),
     "location" : "",
     "warning" : "",
     "doc_url": "https://spikysaurus.github.io/", 
@@ -21,6 +21,13 @@ def string_to_icon(value):
     if value in bpy.types.UILayout.bl_rna.functions["prop"].parameters["icon"].enum_items.keys():
         return bpy.types.UILayout.bl_rna.functions["prop"].parameters["icon"].enum_items[value].value
     return string_to_int(value)
+    
+def sna_update_sna_brush_size_converter_E295A(self, context):
+    sna_updated_prop = self.sna_brush_size_converter
+    val = sna_updated_prop
+    calc = val/400
+    bpy.context.tool_settings.gpencil_paint.brush.unprojected_size = calc
+    
 class SNA_PT_brush_sizes_AD1C2(bpy.types.Panel):
     bl_label = ''
     bl_idname = 'SNA_PT_brush_sizes_AD1C2'
@@ -50,6 +57,9 @@ class SNA_PT_brush_sizes_AD1C2(bpy.types.Panel):
         col_D234F.scale_y = 1.0
         col_D234F.alignment = 'Expand'.upper()
         col_D234F.operator_context = "INVOKE_DEFAULT" if True else "EXEC_DEFAULT"
+        
+        col_D234F.prop(bpy.context.scene, 'sna_brush_size_converter', text='Convert', icon_value=0, emboss=True)
+        
         grid_560E5 = col_D234F.grid_flow(columns=6, row_major=True, even_columns=False, even_rows=False, align=True)
         grid_560E5.enabled = True
         grid_560E5.active = True
@@ -58,6 +68,7 @@ class SNA_PT_brush_sizes_AD1C2(bpy.types.Panel):
         grid_560E5.alignment = 'Expand'.upper()
         grid_560E5.scale_x = 1.0
         grid_560E5.scale_y = 1.0
+        
         if not True: grid_560E5.operator_context = "EXEC_DEFAULT"
         for i_DA934 in range(len(brush_sizes['sna_brush_sizes_list'])):
             op = grid_560E5.operator('wm.brush_sizes_set_14c7c', text=str(int(brush_sizes['sna_brush_sizes_list'][i_DA934] * 400.0)), icon_value=0, emboss=True, depress=False)
@@ -254,17 +265,24 @@ def register():
     bpy.utils.register_class(SNA_OT_Create_Brush_Sizes_Preset_Ce1A5)
     bpy.utils.register_class(BrushSizes_Popover)
     
+    bpy.types.Scene.sna_brush_size_converter = bpy.props.IntProperty(name='Brush Size', description='', default=0, subtype='PIXEL', min=0, update=sna_update_sna_brush_size_converter_E295A)
+    
     #list = [0.0025,0.025,0.05]
     user_lib_index = bpy.context.preferences.filepaths.asset_libraries.find("User Library")
     user_asset_lib = bpy.context.preferences.filepaths.asset_libraries[user_lib_index]
     project_folder = os.path.dirname(user_asset_lib.path)
     output_path = os.path.join(project_folder,"BrushSizes.json")
     json_path = output_path
+    
+    if not json_path or not os.path.exists(json_path):
+        return {'CANCELLED'}
     json_filepath = json_path
     with open(json_filepath, 'r') as f:
         data = json.load(f)
     list = data['Size'] 
     brush_sizes['sna_brush_sizes_list'] = list
+    
+    
         
 def unregister():
     bpy.utils.unregister_class(SNA_PT_brush_sizes_AD1C2)
