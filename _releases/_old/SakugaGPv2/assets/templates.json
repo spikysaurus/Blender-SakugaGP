@@ -1,0 +1,12 @@
+{
+    "LO_Overscan": {
+        "width": 1754,
+        "height": 1240,
+        "action": "cam_overscan"
+    },
+    "LO_Normal": {
+        "width": 1536,
+        "height": 864,
+        "action": "cam_normal"
+    }
+}

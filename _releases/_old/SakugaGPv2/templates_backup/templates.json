@@ -1,0 +1,32 @@
+{
+    "LO_Overscan_IG": {
+        "width": 1754,
+        "height": 1240,
+        "action": "cam_overscan"
+    },
+    "LO_Normal_IG": {
+        "width": 1536,
+        "height": 864,
+        "action": "cam_normal"
+    },
+    "LO_Overscan_WIT": {
+        "width": 2338,
+        "height": 1654,
+        "action": "cam_overscan"
+    },
+    "LO_Normal_WIT": {
+        "width": 1920,
+        "height": 1080,
+        "action": "cam_normal"
+    },
+    "CSP_Overscan": {
+        "width": 2304,
+        "height": 1296,
+        "action": "cam_overscan"
+    },
+    "CSP_normal": {
+        "width": 1920,
+        "height": 1080,
+        "action": "cam_normal"
+    }
+}
