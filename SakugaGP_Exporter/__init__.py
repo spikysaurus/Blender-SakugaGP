@@ -3,7 +3,7 @@ bl_info = {
     "author" : "Sadewoo (Spikysaurus)", 
     "description" : "Exporter",
     "blender" : (5, 0, 0),
-    "version" : (0, 0, 0),
+    "version" : (0, 2, 0),
     "location" : "",
     "warning" : "",
     "doc_url": "https://spikysaurus.github.io/", 

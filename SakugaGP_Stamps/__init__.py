@@ -3,17 +3,35 @@ bl_info = {
     "author" : "Sadewoo (Spikysaurus)", 
     "description" : "Camera and Text Stamps for Grease Pencil",
     "blender" : (5, 0, 0),
-    "version" : (0, 0, 0),
+    "version" : (0, 2, 0),
     "location" : "",
     "warning" : "",
-    "doc_url": "https://spikysaurus.github.io/", 
+    "doc_url": "https://spikysaurus.github.io", 
     "tracker_url": "", 
     "category" : "Animation" 
 }
 
 import bpy
-import bpy,math
-from mathutils import Vector,Matrix
+import math
+import os
+import platform
+from mathutils import Vector, Matrix
+
+# --- CROSS-PLATFORM FONT RETRIEVAL ENGINE ---
+def get_default_font_directory():
+    # Read path from Blender's Preferences > File Paths > Data > Fonts
+    prefs_path = bpy.context.preferences.filepaths.font_directory
+    if prefs_path and os.path.exists(prefs_path):
+        return prefs_path
+        
+    # Hardware environment architecture fallbacks
+    sys_type = platform.system()
+    if sys_type == "Windows":
+        return r"C:\Windows\Fonts"
+    elif sys_type == "Darwin": # macOS
+        return "/Library/Fonts"
+    else: # Linux
+        return "/usr/share/fonts"
 
 # --- PROPERTIES ---
 class FunctionRunnerSettings(bpy.types.PropertyGroup):
@@ -23,6 +41,22 @@ class FunctionRunnerSettings(bpy.types.PropertyGroup):
         default=""
     )
 
+class TextFontSizeSettings(bpy.types.PropertyGroup):
+    font_size_input: bpy.props.FloatProperty(
+        name="Text Font Size",
+        description="Adjust the size of the stamped text geometry",
+        default=1.0,   
+        min=0.1,       
+        max=20.0,      
+        soft_min=0.1,
+        soft_max=20.0
+    )
+    font_file_path: bpy.props.StringProperty(
+        name="Font File",
+        description="Select a .ttf or .otf vector font file path",
+        default=get_default_font_directory(), # Sets system folder root dynamically
+        subtype='FILE_PATH'
+    )
 
 # --- OPERATORS ---
 class CameraStampOperator(bpy.types.Operator):
@@ -33,27 +67,116 @@ class CameraStampOperator(bpy.types.Operator):
         draw_camera_rectangle_gp5(stroke_radius=0.003)
         return {'FINISHED'}
 
-
 class TextStampOperator(bpy.types.Operator):
     bl_idname = "wm.text_stamp"
     bl_label = "Text Stamp"
 
     def execute(self, context):
         custom_text = context.scene.function_runner_settings.text_input
-        if custom_text == "": pass
-        else:
-            draw_auto_text(custom_text, spacing=1.5, stroke_radius=0.1,rotation_deg=90)
+        font_size = context.scene.text_font_size_settings.font_size_input
+        font_path = context.scene.text_font_size_settings.font_file_path
+        
+        if custom_text == "": 
+            return {'CANCELLED'}
+        
+        text_content = custom_text
+        location = (0.0, 0.0, 0.0)
+        rotation_rad = (math.radians(90), 0.0, 0.0)
+
+        target_gp_obj = context.active_object
+
+        if not target_gp_obj or target_gp_obj.type != 'GREASEPENCIL':
+            self.report({'ERROR'}, "Select a Grease Pencil object first!")
+            return {'CANCELLED'}
+
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # Add and configure text object
+        bpy.ops.object.text_add(location=location, rotation=rotation_rad)
+        temp_text_obj = context.active_object
+        temp_text_obj.name = "Temp_Text_Source"
+        temp_text_obj.data.body = text_content
+        temp_text_obj.data.size = font_size
+
+        # Apply Font File configuration
+        if font_path and os.path.exists(font_path) and os.path.isfile(font_path):
+            try:
+                loaded_font = bpy.data.fonts.load(font_path)
+                temp_text_obj.data.font = loaded_font
+            except Exception as e:
+                self.report({'WARNING'}, f"Could not load custom font file: {e}")
+
+        # Convert text curve to modern Grease Pencil V3 object block
+        bpy.ops.object.convert(target='GREASEPENCIL')
+        temp_gp_obj = context.active_object
+ 
+        bpy.data.materials.remove(temp_gp_obj.active_material)
+        bpy.ops.object.material_slot_remove()
+            
+        temp_gp_obj.select_set(True)
+        target_gp_obj.select_set(True)
+        context.view_layer.objects.active = target_gp_obj
+        
+        # Join operations fuse stroke geometry together automatically
+        
+        bpy.ops.object.join()
+        
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.grease_pencil.stroke_material_set()
+
+        # CLEAN UP UNUSED DATABLOCKS
+        for text_data in bpy.data.curves:
+            if text_data.name.startswith("Temp_Text_Source") and text_data.users == 0:
+                bpy.data.curves.remove(text_data)
+
         return {'FINISHED'}
 
+class TextStampObjOperator(bpy.types.Operator):
+    bl_idname = "wm.text_stamp_obj"
+    bl_label = "Text Stamp Object"
+
+    def execute(self, context):
+        custom_text = context.scene.function_runner_settings.text_input
+        font_size = context.scene.text_font_size_settings.font_size_input
+        font_path = context.scene.text_font_size_settings.font_file_path
+        
+        if custom_text == "": 
+            return {'CANCELLED'}
+        
+        text_content = custom_text
+        location = (0.0, 0.0, 0.0)
+        rotation_rad = (math.radians(90), 0.0, 0.0)
+
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # Add and configure text object
+        bpy.ops.object.text_add(location=location, rotation=rotation_rad)
+        temp_text_obj = context.active_object
+        temp_text_obj.name = "txt_" + custom_text
+        temp_text_obj.data.body = text_content
+        temp_text_obj.data.size = font_size
+        
+        # Apply custom font to pure 3D Text Object too
+        if font_path and os.path.exists(font_path) and os.path.isfile(font_path):
+            try:
+                loaded_font = bpy.data.fonts.load(font_path)
+                temp_text_obj.data.font = loaded_font
+            except Exception as e:
+                self.report({'WARNING'}, f"Could not load custom font file: {e}")
+        
+        return {'FINISHED'}
 
 class RunTestOperator(bpy.types.Operator):
     bl_idname = "wm.run_test"
     bl_label = "Run Test"
-
     def execute(self, context):
-#        run_test(context)
         return {'FINISHED'}
-
 
 # --- PANEL ---
 class FunctionRunnerPanel(bpy.types.Panel):
@@ -66,19 +189,25 @@ class FunctionRunnerPanel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         settings = context.scene.function_runner_settings
-
-        # Box with text input + second button
+        font_size_settings = context.scene.text_font_size_settings
+        
         col = layout.column(align=True)
         col.prop(settings, "text_input", text="Text")
-        col.operator(TextStampOperator.bl_idname, text="Text Stamp")
-        # Camera Stamp button
+        col.prop(font_size_settings, "font_file_path", text="Font")
+        col.prop(font_size_settings, "font_size_input", text="Font Size", slider=True)
+        
+        col.separator()
+        col.operator(TextStampOperator.bl_idname, text="Add Text into GP")
+        col.operator(TextStampObjOperator.bl_idname, text="Add Text Object")
         col.operator(CameraStampOperator.bl_idname, text="Camera Stamp")
 
 # --- REGISTER ---
 classes = (
     FunctionRunnerSettings,
+    TextFontSizeSettings,
     CameraStampOperator,
     TextStampOperator,
+    TextStampObjOperator,
     RunTestOperator,
     FunctionRunnerPanel,
 )
@@ -87,17 +216,16 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.function_runner_settings = bpy.props.PointerProperty(type=FunctionRunnerSettings)
-
+    bpy.types.Scene.text_font_size_settings = bpy.props.PointerProperty(type=TextFontSizeSettings)
+     
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.function_runner_settings
+    del bpy.types.Scene.text_font_size_settings
 
 if __name__ == "__main__":
     register()
-
-
-
 
 #CAMERA STAMP
 def get_camera_frame_world(cam_obj, scene):
@@ -120,7 +248,9 @@ def draw_camera_rectangle_gp5(cam_obj=None,
     gp_obj = ensure_gp_object(gp_name)
     layer = ensure_layer(gp_obj, layer_name)
     mat = ensure_material(gp_obj, material_name, color)
-
+    if mat is None:
+        
+        return {'CANCELLED'} 
     # Ensure frame
     frame = None
     for f in layer.frames:
@@ -129,7 +259,7 @@ def draw_camera_rectangle_gp5(cam_obj=None,
             break
     if frame is None:
         frame = layer.frames.new(scene.frame_current)
-
+    
     drawing = frame.drawing
 
     # Create stroke
@@ -138,357 +268,14 @@ def draw_camera_rectangle_gp5(cam_obj=None,
     stroke.cyclic = True
     stroke.material_index = gp_obj.data.materials.find(mat.name)
 
+
     # Assign points with new API
     for i, p in enumerate(corners_world):
         stroke.points[i].position = p
         stroke.points[i].radius = stroke_radius
 
     gp_obj.show_in_front = True
-
-# TEXT STAMP
-
-# Stick‑font strokes for A–Z, 0–9, and symbols
-CHAR_STROKES = {
-    "A": [
-        [Vector((0,0,0)), Vector((0.5,1,0)), Vector((1,0,0))],        # main outline
-        [Vector((0.25,0.5,0)), Vector((0.75,0.5,0))],                 # crossbar
-        [Vector((0,0,0)), Vector((0.05,0.1,0))],                      # left serif
-        [Vector((1,0,0)), Vector((0.95,0.1,0))]                       # right serif
-    ],
-    "B": [
-        # Vertical spine
-        [Vector((0,0,0)), Vector((0,1,0))],
-
-        # Upper lobe (like a D from mid to top)
-        [Vector((0,1,0))] +
-        [Vector((0.5 + 0.5*math.cos(math.radians(a)),
-                 0.75 + 0.25*math.sin(math.radians(a)), 0))
-         for a in range(90, -91, -30)] +
-        [Vector((0,0.5,0))],
-
-        # Lower lobe (like a D from mid to bottom)
-        [Vector((0,0.5,0))] +
-        [Vector((0.5 + 0.5*math.cos(math.radians(a)),
-                 0.25 + 0.25*math.sin(math.radians(a)), 0))
-         for a in range(90, -91, -30)] +
-        [Vector((0,0,0))]
-    ],
-    "C": [
-        [
-            Vector((0.6 + 0.7*math.cos(math.radians(a)),   # shift center left, radius wider
-                    0.5 + 0.5*math.sin(math.radians(a)), 0))
-            for a in range(60, 300, 5)  # arc from top to bottom, open on right
-        ]
-    ],
-    "D": [
-        # Vertical spine
-        [Vector((0,0,0)), Vector((0,1,0))],
-
-        # Curved right side (arc from top to bottom)
-        [Vector((0,1,0))] +
-        [Vector((0.5 + 0.5*math.cos(math.radians(a)),
-                 0.5 + 0.5*math.sin(math.radians(a)), 0))
-         for a in range(90, -91, -30)] +
-        [Vector((0,0,0))]
-    ],
-    "E": [
-        [Vector((0,0,0)), Vector((0,1,0))],                           # spine
-        [Vector((0,1,0)), Vector((1,1,0))],                           # top bar
-        [Vector((0,0.5,0)), Vector((0.7,0.5,0))],                     # middle bar
-        [Vector((0,0,0)), Vector((1,0,0))]                            # bottom bar
-    ],
-    "F": [[Vector((0,0,0)), Vector((0,1,0)), Vector((1,1,0))],
-          [Vector((0,0.5,0)), Vector((0.7,0.5,0))]],
-    "G": [
-        # Outer arc (like O but open on right)
-        [
-            Vector((0.5 + 0.5*math.cos(math.radians(a)),
-                    0.5 + 0.5*math.sin(math.radians(a)), 0))
-            for a in range(60, 380, 20)  # arc from top to bottom
-        ],
-        # Horizontal bar inside G
-        [Vector((0.5,0.5,0)), Vector((1,0.5,0))]
-    ],
-    "H": [[Vector((0,0,0)), Vector((0,1,0))],
-          [Vector((1,0,0)), Vector((1,1,0))],
-          [Vector((0,0.5,0)), Vector((1,0.5,0))]],
-    "I": [
-        # Vertical stem
-        [Vector((0.5,0,0)), Vector((0.5,1,0))],
-
-        # Top horizontal bar
-        [Vector((0.2,1,0)), Vector((0.8,1,0))],
-
-        # Bottom horizontal bar
-        [Vector((0.2,0,0)), Vector((0.8,0,0))]
-    ],
-     "J": [
-        # Right vertical stem
-        [Vector((0.85,1,0)), Vector((0.85,0.25,0))],
-
-        # Bottom smooth curve (no duplicate start point)
-        [Vector((0.85,0.25,0))] +
-        [Vector((0.4 + 0.45*math.cos(math.radians(a)),
-                 0.25 - 0.30*math.sin(math.radians(a)), 0))
-         for a in range(15, 181, 15)] 
-    ],
-    "K": [
-        [Vector((0,0,0)), Vector((0,1,0))],                      # vertical spine
-        [Vector((0,0.5,0)), Vector((1,1,0))],                    # upper diagonal
-        [Vector((0,0.5,0)), Vector((1,0,0))]                     # lower diagonal
-    ],
-    "L": [
-        [Vector((0,1,0)), Vector((0,0,0)), Vector((1,0,0))]      # L shape
-    ],
-    "M": [
-        [Vector((0,0,0)), Vector((0,1,0)), Vector((0.5,0.5,0)),  # left vertical + middle peak
-         Vector((1,1,0)), Vector((1,0,0))]                       # right vertical
-    ],
-    "N": [
-        [Vector((0,0,0)), Vector((0,1,0)), Vector((1,0,0)), Vector((1,1,0))]  # diagonal N
-    ],
-    "O": [
-        [
-            Vector((0.5 + 0.5*math.cos(math.radians(a)),
-                    0.5 + 0.5*math.sin(math.radians(a)), 0))
-            for a in range(0, 361, 15)  # full circle, 0° to 360° in 15° steps
-        ]
-    ],
-    "P": [
-        # Vertical spine
-        [Vector((0,0,0)), Vector((0,1,0))],
-
-        # Top loop (rotated half‑O, bulging to the right)
-        [Vector((0,1,0))] +
-        [
-            Vector((
-                0.5 + 0.5*math.cos(math.radians(a)),   # horizontal radius
-                0.75 + 0.25*math.sin(math.radians(a)), # vertical radius
-                0
-            ))
-            for a in range(90, -91, -15)  # sweep from top (90°) down to bottom (‑90°), rotated right
-        ] +
-        [Vector((0,0.5,0))]
-    ],
-    "Q": [
-        # Outer circle (like O)
-        [
-            Vector((0.5 + 0.5*math.cos(math.radians(a)),
-                    0.5 + 0.5*math.sin(math.radians(a)), 0))
-            for a in range(0, 361, 15)  # full circle
-        ],
-
-        # Longer tail stroke
-        [Vector((0.65,0.35,0)), Vector((1.0,0.0,0))]
-    ],
-    "R": [
-        [Vector((0,0,0)), Vector((0,1,0)), Vector((1,1,0)), Vector((1,0.5,0)), Vector((0,0.5,0))], # P loop
-        [Vector((0,0.5,0)), Vector((1,0,0))]                                                       # diagonal leg
-    ],
-    "S": [
-        [Vector((1,1,0)), Vector((0,1,0)), Vector((0,0.5,0)),
-         Vector((1,0.5,0)), Vector((1,0,0)), Vector((0,0,0))]    # zigzag S
-    ],
-    "T": [
-        [Vector((0,1,0)), Vector((1,1,0))],                   # top bar
-        [Vector((0.5,1,0)), Vector((0.5,0,0))]                # vertical stem
-    ],
-   "U": [
-        # Left vertical stem (moved further left)
-        [Vector((0.1,1,0)), Vector((0.1,0.3,0))],
-
-        # Right vertical stem (moved further right)
-        [Vector((0.9,1,0)), Vector((0.9,0.3,0))],
-
-        # Bottom curved hook (wider arc connecting stems)
-        [Vector((0.1,0.3,0))] +
-        [Vector((0.5 + 0.4*math.cos(math.radians(a)),
-                 0.3 + 0.3*math.sin(math.radians(a)), 0))
-         for a in range(180, 360+1, 30)] +
-        [Vector((0.9,0.3,0))]
-    ],
-    "V": [
-        [Vector((0,1,0)), Vector((0.5,0,0)), Vector((1,1,0))]  # V shape
-    ],
-    "W": [
-        [Vector((0,1,0)), Vector((0.25,0,0)), Vector((0.5,1,0)), Vector((0.75,0,0)), Vector((1,1,0))]
-    ],
-    "X": [
-        [Vector((0,0,0)), Vector((1,1,0))],                   # diagonal /
-        [Vector((1,0,0)), Vector((0,1,0))]                    # diagonal \
-    ],
-    "Y": [
-        [Vector((0,1,0)), Vector((0.5,0.5,0)), Vector((1,1,0))],  # upper fork
-        [Vector((0.5,0.5,0)), Vector((0.5,0,0))]                  # stem
-    ],
-    "Z": [
-        [Vector((0,1,0)), Vector((1,1,0)), Vector((0,0,0)), Vector((1,0,0))]  # zigzag Z
-    ],
-    "1": [
-        [Vector((0.5,0,0)), Vector((0.5,1,0))]                   # vertical line
-    ],
-    "2": [
-        [
-            Vector((0,1,0)),   # top left
-            Vector((1,1,0)),   # top right
-            Vector((1,0.5,0)), # mid right
-            Vector((0,0,0)),   # bottom left
-            Vector((1,0,0))    # bottom right
-        ]
-    ],
-    "3": [
-        [
-            Vector((0,1,0)),   # top left
-            Vector((1,1,0)),   # top right
-            Vector((1,0.5,0)), # middle right
-            Vector((0.5,0.5,0)), # middle left
-            Vector((1,0.5,0)), # back to middle right (reinforce spine)
-            Vector((1,0,0)),   # bottom right
-            Vector((0,0,0))    # bottom left
-        ]
-    ],
-    "4": [
-        [Vector((0,1,0)), Vector((0,0.5,0)), Vector((1,0.5,0))], # crossbar
-        [Vector((1,1,0)), Vector((1,0,0))]                       # vertical
-    ],
-    "5": [
-        [Vector((1,1,0)), Vector((0,1,0)), Vector((0,0.5,0)),
-         Vector((1,0.5,0)), Vector((1,0,0)), Vector((0,0,0))]    # zigzag 5
-    ],
-    "6": [
-        [Vector((1,1,0)), Vector((0,1,0)), Vector((0,0,0)),
-         Vector((1,0,0)), Vector((1,0.5,0)), Vector((0,0.5,0))]  # loop with tail
-    ],
-    "7": [
-        [Vector((0,1,0)), Vector((1,1,0)), Vector((0.5,0,0))]    # angled 7
-    ],
-    "8": [
-        [Vector((0,0,0)), Vector((0,1,0)), Vector((1,1,0)),
-         Vector((1,0,0)), Vector((0,0,0))],                      # outer box
-        [Vector((0,0.5,0)), Vector((1,0.5,0))]                   # middle bar
-    ],
-    "9": [
-        [Vector((1,0,0)), Vector((1,1,0)), Vector((0,1,0)),
-         Vector((0,0.5,0)), Vector((1,0.5,0))]                   # loop with tail
-    ],
-    "0": [
-        # Outer O shape (ellipse arc)
-        [
-            Vector((
-                0.5 + 0.5*math.cos(math.radians(a)),
-                0.5 + 0.5*math.sin(math.radians(a)),
-                0
-            ))
-            for a in range(0, 360, 15)  # full circle
-        ] + [Vector((1,0.5,0))],  # close loop
-
-        # Diagonal slash inside
-        [
-            Vector((0.2,0.2,0)),
-            Vector((0.8,0.8,0))
-        ]
-    ],
-    # Period
-    ".": [
-        [Vector((0.5,0,0)), Vector((0.5,0.1,0))]
-    ],
-
-    # Comma
-    ",": [
-        [Vector((0.5,0,0)), Vector((0.45,-0.15,0))]
-    ],
-
-    # Colon
-    ":": [
-        [Vector((0.5,0.8,0)), Vector((0.5,0.9,0))],
-        [Vector((0.5,0.1,0)), Vector((0.5,0.2,0))]
-    ],
-
-    # Semicolon
-    ";": [
-        [Vector((0.5,0.8,0)), Vector((0.5,0.9,0))],
-        [Vector((0.5,0.1,0)), Vector((0.45,-0.15,0))]
-    ],
-
-    # Dash / Minus
-    "-": [
-        [Vector((0.2,0.5,0)), Vector((0.8,0.5,0))]
-    ],
-
-    # Plus
-    "+": [
-        [Vector((0.2,0.5,0)), Vector((0.8,0.5,0))],
-        [Vector((0.5,0.2,0)), Vector((0.5,0.8,0))]
-    ],
-
-    # Asterisk
-    "*": [
-        [Vector((0.5,0.2,0)), Vector((0.5,0.8,0))],
-        [Vector((0.2,0.5,0)), Vector((0.8,0.5,0))],
-        [Vector((0.25,0.25,0)), Vector((0.75,0.75,0))],
-        [Vector((0.25,0.75,0)), Vector((0.75,0.25,0))]
-    ],
-
-    # Slash
-    "/": [
-        [Vector((0.2,0,0)), Vector((0.8,1,0))]
-    ],
-
-    # Backslash
-    "\\": [
-        [Vector((0.2,1,0)), Vector((0.8,0,0))]
-    ],
-
-    # Equals
-    "=": [
-        [Vector((0.2,0.65,0)), Vector((0.8,0.65,0))],
-        [Vector((0.2,0.35,0)), Vector((0.8,0.35,0))]
-    ],
-
-    "!": [
-        # Main vertical stroke (stops at 0.3 instead of 0.2)
-        [
-            Vector((0.5,0.4,0)),  # lower end of stroke
-            Vector((0.5,1.0,0))   # top end of stroke
-        ],
-
-        # Dot at the bottom (separate, with gap)
-        [
-            Vector((0.5,0,0)),
-            Vector((0.5,0.1,0))
-        ]
-    ],
-
-    # Question
-    "?": [
-        [Vector((0.2,0.8,0)), Vector((0.5,1,0)), Vector((0.8,0.8,0)), Vector((0.5,0.6,0))],
-        [Vector((0.5,0,0)), Vector((0.5,0.1,0))]
-    ],
-
-    # Parentheses
-    "(": [
-        [Vector((0.7,1,0)), Vector((0.3,0.5,0)), Vector((0.7,0,0))]
-    ],
-    ")": [
-        [Vector((0.3,1,0)), Vector((0.7,0.5,0)), Vector((0.3,0,0))]
-    ],
-
-    # Brackets
-    "[": [
-        [Vector((0.7,1,0)), Vector((0.3,1,0)), Vector((0.3,0,0)), Vector((0.7,0,0))]
-    ],
-    "]": [
-        [Vector((0.3,1,0)), Vector((0.7,1,0)), Vector((0.7,0,0)), Vector((0.3,0,0))]
-    ],
-
-    # Curly braces
-    "{": [
-        [Vector((0.7,1,0)), Vector((0.5,0.8,0)), Vector((0.5,0.2,0)), Vector((0.7,0,0))]
-    ],
-    "}": [
-        [Vector((0.3,1,0)), Vector((0.5,0.8,0)), Vector((0.5,0.2,0)), Vector((0.3,0,0))]
-    ]
-}
+    
 def ensure_gp_object(name="GP_ManualText"):
     gp_obj = bpy.context.active_object
 
@@ -578,8 +365,3 @@ def draw_auto_text(text="HELLO<br>WORLD", spacing=1.5, line_height=1.0, line_spa
 
         # move down for next line with extra spacing
         y_offset += (line_height + line_spacing) * scale
-
-    # Position GP object in front of camera and align rotation
-#    gp_obj.location = cam.location + cam.matrix_world.to_quaternion() @ Vector((0,0,-2))
-#    gp_obj.rotation_euler = cam.rotation_euler
-#    gp_obj.show_in_front = True
