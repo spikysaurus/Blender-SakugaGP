@@ -1,6 +1,6 @@
 bl_info = {
-    "name": "Sakuga - Fill Brush (Experimental)",
-    "author": "Sadewoo",
+    "name": "SakugaGP - Fill Brush (Experimental)",
+    "author": "Sadewoo (Spikysaurus)",
     "version": (0, 0, 1),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > SakugaGP > Fill Brush",
