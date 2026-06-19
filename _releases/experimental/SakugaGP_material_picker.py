@@ -13,7 +13,7 @@ from bpy.types import GizmoGroup, Operator
 from mathutils import Matrix
 
 BUTTON_OFFSET = [100, 100]   # offset from chosen corner
-ANCHOR_CORNER = "BL"         # BL, BR, TL, TR
+ANCHOR_CORNER = "TL"         # BL, BR, TL, TR
 BUTTON_SPACING_X, BUTTON_SPACING_Y = 30, 40
 SMALL_BUTTON_OFFSET_X, SMALL_BUTTON_OFFSET_Y = 8, -18
 BUTTONS_PER_LINE = 8
@@ -147,14 +147,14 @@ class VIEW3D_GZ_gp_material_buttons(GizmoGroup):
                     btn = self.gizmos.new("GIZMO_GT_button_2d")
                     op = btn.target_set_operator("view3d.set_gp_material")
                     op.material_index, op.material_name = i, mat.name
-                    btn.icon, btn.scale_basis = 'NONE', 12.0
-                    btn.draw_options, btn.color, btn.alpha = {'BACKDROP'}, tuple(gp.fill_color[:3]), gp.fill_color[3]
+                    btn.icon, btn.scale_basis = 'STROKE', 12.0
+                    btn.draw_options, btn.color, btn.alpha = {'BACKDROP'}, tuple(gp.color[:3]), gp.color[3]
                     btn.use_draw_modal = True; self.buttons.append(btn)
                     small_btn = self.gizmos.new("GIZMO_GT_button_2d")
                     op_s = small_btn.target_set_operator("view3d.set_gp_material")
                     op_s.material_index, op_s.material_name = i, mat.name
-                    small_btn.icon, small_btn.scale_basis = 'STROKE', 10.0
-                    small_btn.draw_options, small_btn.color, small_btn.alpha = {'BACKDROP'}, tuple(gp.color[:3]), gp.color[3]
+                    small_btn.icon, small_btn.scale_basis = 'MESH_CIRCLE', 10.0
+                    small_btn.draw_options, small_btn.color, small_btn.alpha = {'BACKDROP'}, tuple(gp.fill_color[:3]), gp.fill_color[3]
                     small_btn.use_draw_modal = True; self.small_buttons.append(small_btn)
     def draw_prepare(self, context):
         global BUTTON_OFFSET, BUTTON_SPACING_X, BUTTON_SPACING_Y, BUTTONS_PER_LINE, ANCHOR_CORNER
