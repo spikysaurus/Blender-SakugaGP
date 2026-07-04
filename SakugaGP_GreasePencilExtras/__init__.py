@@ -1,9 +1,9 @@
 bl_info = {
     "name" : "SakugaGP - Grease Pencil Extras",
     "author" : "Sadewoo (Spikysaurus)", 
-    "description" : "Some extra buttons",
+    "description" : "Some extra stuff for Grease Pencil",
     "blender" : (5, 0, 0),
-    "version" : (0, 1, 0),
+    "version" : (0, 1, 1),
     "location" : "",
     "warning" : "",
     "doc_url": "https://spikysaurus.github.io/", 
@@ -14,7 +14,6 @@ bl_info = {
 import bpy
 from bpy.app.handlers import persistent
 import bpy.utils.previews
-
 
 def string_to_icon(value):
     if value in bpy.types.UILayout.bl_rna.functions["prop"].parameters["icon"].enum_items.keys():
@@ -238,15 +237,100 @@ class SNA_OT_Link_All_Materials_A41Fe(bpy.types.Operator):
 
     def invoke(self, context, event):
         return self.execute(context)
-    
 
+
+def get_gp_layer_keyframes(obj, skip_flags=None):
+    """Return sorted list of keyframe numbers for the active GP layer,
+       optionally skipping certain keyframe types."""
+    if not obj or obj.type != 'GREASEPENCIL':
+        return []
+    layer = obj.data.layers.active
+    if not layer:
+        return []
+
+    frames = []
+    for f in layer.frames:
+        if skip_flags:
+            if skip_flags.get('NONE', False) and f.keyframe_type == 'KEYFRAME':
+                continue
+            if skip_flags.get(f.keyframe_type, False):
+                continue
+        frames.append(f.frame_number)
+
+    return sorted(frames)
+
+class CycleGPKeyframeJump(bpy.types.Operator):
+    """Jump to next/prev grease pencil keyframe with cycling"""
+    bl_idname = "screen.cycle_gp_keyframe_jump"
+    bl_label = "Cycle GP Keyframe Jump"
+
+    next: bpy.props.BoolProperty(default=True)
+
+    def execute(self, context):
+        obj = context.active_object
+        current = context.scene.frame_current
+
+        wm = context.window_manager
+        skip_flags = {
+            'NONE': wm.skip_none,
+            'BREAKDOWN': wm.skip_breakdown,
+            'MOVING_HOLD': wm.skip_moving_hold,
+            'EXTREME': wm.skip_extreme,
+            'JITTER': wm.skip_jitter,
+        }
+
+        keyframes = get_gp_layer_keyframes(obj, skip_flags)
+        if not keyframes:
+            self.report({'WARNING'}, "No grease pencil keyframes found")
+            return {'CANCELLED'}
+
+        if self.next:
+            next_frames = [f for f in keyframes if f > current]
+            context.scene.frame_current = next_frames[0] if next_frames else keyframes[0]
+        else:
+            prev_frames = [f for f in keyframes if f < current]
+            context.scene.frame_current = prev_frames[-1] if prev_frames else keyframes[-1]
+
+        return {'FINISHED'}
+
+class SNA_PT_ANIMATION(bpy.types.Panel):
+    bl_label = 'Animation'
+    bl_idname = 'SNA_PT_ANIMATION'
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'SNA_PT_GREASE_PENCIL_888D9'
+
+    def draw(self, context):
+        layout = self.layout
+
+        # Label
+        layout.label(text="Jump to Keyframe (Cycle) :")
+
+        # Row for operators
+        row = layout.row(align=True)
+        row.operator("screen.cycle_gp_keyframe_jump",
+                     text="Prev",
+                     icon_value=string_to_icon('FRAME_PREV')).next = False
+        row.operator("screen.cycle_gp_keyframe_jump",
+                     text="Next",
+                     icon_value=string_to_icon('FRAME_NEXT')).next = True
+
+        # Boolean buttons for skip types with icons
+        col = layout.column(align=True)
+        col.label(text="Skip Keyframe Types :")
+        col.prop(context.window_manager, "skip_none", toggle=True)
+        col.prop(context.window_manager, "skip_breakdown", toggle=True)
+        col.prop(context.window_manager, "skip_moving_hold", toggle=True)
+        col.prop(context.window_manager, "skip_extreme", toggle=True)
+        col.prop(context.window_manager, "skip_jitter", toggle=True)
+        
 class SNA_PT_OBJECT_4C8BE(bpy.types.Panel):
     bl_label = 'Object'
     bl_idname = 'SNA_PT_OBJECT_4C8BE'
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_context = ''
-    bl_order = 0
+    bl_order = 1
     bl_parent_id = 'SNA_PT_GREASE_PENCIL_888D9'
     bl_ui_units_x=0
 
@@ -276,7 +360,7 @@ class SNA_PT_MATERIAL_A3AB5(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_context = ''
-    bl_order = 1
+    bl_order = 2
     bl_parent_id = 'SNA_PT_GREASE_PENCIL_888D9'
     bl_ui_units_x=0
     
@@ -330,10 +414,22 @@ class SNA_PT_MATERIAL_A3AB5(bpy.types.Panel):
 def register():
     global _icons
     _icons = bpy.utils.previews.new()
+
+    bpy.utils.register_class(SNA_PT_GREASE_PENCIL_888D9)
+
+    bpy.utils.register_class(CycleGPKeyframeJump)
+    bpy.utils.register_class(SNA_PT_ANIMATION)
+    
+     # Define WindowManager properties so they persist and can be drawn in the panel
+    bpy.types.WindowManager.skip_none = bpy.props.BoolProperty(name="Keyframe", default=False)
+    bpy.types.WindowManager.skip_breakdown = bpy.props.BoolProperty(name="Breakdown", default=False)
+    bpy.types.WindowManager.skip_moving_hold = bpy.props.BoolProperty(name="Moving Hold", default=False)
+    bpy.types.WindowManager.skip_extreme = bpy.props.BoolProperty(name="Extreme", default=False)
+    bpy.types.WindowManager.skip_jitter = bpy.props.BoolProperty(name="Jitter", default=False)
     
     bpy.utils.register_class(SNA_OT_Add_Empty_Without_Materials_7097F)
     bpy.utils.register_class(SNA_OT_Add_Empty_With_All_Materials_Abd31)
-    bpy.utils.register_class(SNA_PT_GREASE_PENCIL_888D9)
+    
     bpy.utils.register_class(SNA_OT_Link_All_Materials_A41Fe)
     bpy.utils.register_class(SNA_OT_Unlink_All_Materials_7Fc01)
     bpy.utils.register_class(SNA_OT_Delete_Material_238Fa)
@@ -343,12 +439,23 @@ def register():
     bpy.utils.register_class(SNA_PT_OBJECT_4C8BE)
     bpy.utils.register_class(SNA_PT_MATERIAL_A3AB5)
     
+    
 def unregister():
     global _icons
     bpy.utils.previews.remove(_icons)
+    bpy.utils.unregister_class(SNA_PT_GREASE_PENCIL_888D9)
+    
+    del bpy.types.WindowManager.skip_none
+    del bpy.types.WindowManager.skip_breakdown
+    del bpy.types.WindowManager.skip_moving_hold
+    del bpy.types.WindowManager.skip_extreme
+    del bpy.types.WindowManager.skip_jitter
+    bpy.utils.unregister_class(SNA_PT_ANIMATION)
+    bpy.utils.unregister_class(CycleGPKeyframeJump)
+
     bpy.utils.unregister_class(SNA_OT_Add_Empty_Without_Materials_7097F)
     bpy.utils.unregister_class(SNA_OT_Add_Empty_With_All_Materials_Abd31)
-    bpy.utils.unregister_class(SNA_PT_GREASE_PENCIL_888D9)
+    
     bpy.utils.unregister_class(SNA_OT_Link_All_Materials_A41Fe)
     bpy.utils.unregister_class(SNA_OT_Unlink_All_Materials_7Fc01)
     bpy.utils.unregister_class(SNA_OT_Delete_Material_238Fa)

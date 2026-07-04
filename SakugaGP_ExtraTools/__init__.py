@@ -286,8 +286,6 @@ class Tools_Popover(bpy.types.Panel):
     bl_idname = "wm.popover"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'WINDOW'
-#    bl_category = "SakugaGP"
-
 
     def draw(self, context):
         layout = self.layout
@@ -298,8 +296,6 @@ class Tools_Popover(bpy.types.Panel):
         col.operator("wm.save_buttons", text="Save JSON", icon_value=string_to_icon('FILE_TICK'))
         col.operator("wm.load_buttons", text="Load JSON", icon_value=string_to_icon('FILE_REFRESH'))
         col.operator('wm.open_asset_library_folder', text='Open JSON Path', icon_value=string_to_icon('FILE_FOLDER'), emboss=True, depress=False)
-        
-        
         
 # Main toolbar panel
 class toolbar(bpy.types.Panel):

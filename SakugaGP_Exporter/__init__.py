@@ -3,7 +3,7 @@ bl_info = {
     "author" : "Sadewoo (Spikysaurus)", 
     "description" : "Exporter",
     "blender" : (5, 0, 0),
-    "version" : (0, 2, 0),
+    "version" : (0, 2, 1),
     "location" : "",
     "warning" : "",
     "doc_url": "https://spikysaurus.github.io/", 
@@ -171,16 +171,80 @@ class SNA_PT_menu_6D4CE(bpy.types.Panel):
         col_8ED43.alignment = 'Expand'.upper()
         col_8ED43.operator_context = "INVOKE_DEFAULT" if True else "EXEC_DEFAULT"
         GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
+        col_8ED43.prop(bpy.context.scene, 'sna_type_target_layer_data', text='', icon_value=string_to_icon('OUTLINER_DATA_GP_LAYER'), emboss=True)
         col_8ED43.prop(bpy.context.scene, 'sna_type_which_gp_to_renderexport', text='', icon_value=string_to_icon('OUTLINER_DATA_GREASEPENCIL'), emboss=True)
         op = col_8ED43.operator('wm.render_all_keyframes__b07bc', text=str('Render '+'('+GPData+')'), icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
         op = col_8ED43.operator('wm.render_layer_keyframes_default_ec843', text='Render Current Layer', icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
         op = col_8ED43.operator('wm.export_xdts_457ec', text='Export XDTS', icon_value=string_to_icon('SPREADSHEET'), emboss=True, depress=False)
-        
-#        op = col_8ED43.operator('wm.render_layer_keyframes_svg_3543e', text='Render Current (SVG)', icon_value=string_to_icon('RENDERLAYERS'), emboss=True, depress=False)
-#        op = col_8ED43.operator('wm.open_output_folder_ac060', text='Open Output Folder', icon_value=string_to_icon('FILE_FOLDER'), emboss=True, depress=False)
+        op = col_8ED43.operator('wm.copy_text_commands', text='Copy Commands', icon_value=string_to_icon('DUPLICATE'), emboss=True, depress=False)
 #        col_E0D27.prop(bpy.context.scene, 'sna_skip_extreme_type', text='Skip Extreme Keyframe', icon_value=0, emboss=True)
-#        op = col_E0D27.operator('wm.export_opentoonz_647d7', text='Export Opentoonz', icon_value=string_to_icon('BRUSHES_ALL'), emboss=True, depress=False)
-#        op = col_E0D27.operator('wm.open_output_folder001_5d731', text='Open Output Folder', icon_value=string_to_icon('FILE_FOLDER'), emboss=True, depress=False)
+
+class SNA_Copy_Text_Commands(bpy.types.Operator):
+    """Copy GP layer 'data' frames as text command, paste this command to auto-sheet : https://moaang.github.io/auto-sheet/"""
+    bl_idname = "wm.copy_text_commands"
+    bl_label = "Copy GP Layer Data"
+
+    def execute(self, context):
+        output_lines = []
+        scene = context.scene
+        
+        GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
+        TargetLayerData = bpy.context.scene.sna_type_target_layer_data
+        layers = []
+        for obj_name in GPData.split(','):
+            obj_name = obj_name.strip()  # remove whitespace
+            if obj_name in bpy.data.objects:
+                layers.append(bpy.data.objects[obj_name])
+                
+        for obj in layers:
+            if TargetLayerData in obj.data.layers:
+                layer = obj.data.layers[TargetLayerData]
+                frames = layer.frames
+                line = obj.name + ": "
+
+                sorted_frames = sorted(frames, key=lambda f: f.frame_number)
+
+                prev_frame = None
+                count = 0
+                for f in sorted_frames:
+                    # Fill gaps with 'n'
+                    if prev_frame is not None and f.frame_number > prev_frame + 1:
+                        gap = f.frame_number - prev_frame - 1
+                        line += " " + " ".join(["n"] * gap)
+
+                    # Encode keyframe type
+                    if f.keyframe_type == 'KEYFRAME':
+                        count += 1
+                        line += " " + str(count)
+                    elif f.keyframe_type == 'BREAKDOWN':
+                        line += " dot"
+                    elif f.keyframe_type == 'EXTREME':
+                        line += " x"
+                    elif f.keyframe_type == 'MOVING_HOLD':
+                        line += " _"
+                    elif f.keyframe_type == 'GENERATED':
+                        line += " rep"
+
+                    prev_frame = f.frame_number
+
+                output_lines.append(line.strip())
+
+        # Write to Text datablock
+        if "GP_Layer_Data" not in bpy.data.texts:
+            textblock = bpy.data.texts.new("GP_Layer_Data")
+        else:
+            textblock = bpy.data.texts["GP_Layer_Data"]
+
+        textblock.clear()
+        for line in output_lines:
+            textblock.write(line + "\n")
+
+        # Copy to clipboard
+        clipboard_text = "\n".join(output_lines)
+        bpy.context.window_manager.clipboard = clipboard_text
+
+        self.report({'INFO'}, "Frame data copied to Text Editor and clipboard")
+        return {'FINISHED'}
 
 
 class SNA_OT_Set_To_Mp4_4Fc1E(bpy.types.Operator):
@@ -188,12 +252,6 @@ class SNA_OT_Set_To_Mp4_4Fc1E(bpy.types.Operator):
     bl_label = "Set to MP4"
     bl_description = "Set output setting to MP4"
     bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
 
     def execute(self, context):
         sc = bpy.context.scene
@@ -214,12 +272,6 @@ class SNA_OT_Set_To_Mov_4C792(bpy.types.Operator):
     bl_label = "Set to MOV"
     bl_description = "Set output setting to MOV (RGBA)"
     bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
 
     def execute(self, context):
         sc = bpy.context.scene
@@ -244,12 +296,6 @@ class SNA_OT_Set_To_Png_9C466(bpy.types.Operator):
     bl_description = "Set output setting to PNG"
     bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
     def execute(self, context):
         sc = bpy.context.scene
         sc.render.image_settings.media_type = "IMAGE"
@@ -270,12 +316,6 @@ class SNA_OT_Render_Layer_Keyframes_Default_Ec843(bpy.types.Operator):
     bl_label = "Render Layer Keyframes (Default)"
     bl_description = "Only render current layer's keyframes"
     bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
 
     def execute(self, context):
         str_filename = bpy.context.scene.sna_frame_number_filenames
@@ -302,13 +342,13 @@ class SNA_OT_Render_Layer_Keyframes_Default_Ec843(bpy.types.Operator):
                 if str_filename == 'Counting Numbers':
                     filename_number += 1
                     scene.render.filepath = fp + str(filename_number)
-                elif str_filename == 'Layer name + Counting Numbers':
+                elif str_filename == 'GP name + Counting Numbers':
                     filename_number += 1
-                    scene.render.filepath = fp + str(obj.data.name) + "_" + str(filename_number).zfill(4)
+                    scene.render.filepath = fp + obj.name + "_" + str(filename_number).zfill(4)
                 elif str_filename == 'Frame Numbers':
                     scene.render.filepath = fp + str(frame_nr)
-                elif str_filename == 'Layer name + Frame Numbers':
-                    scene.render.filepath = fp + str(obj.data.name) + "_" + str(frame_nr).zfill(4)
+                elif str_filename == 'GP name + Frame Numbers':
+                    scene.render.filepath = fp + obj.name + "_" + str(frame_nr).zfill(4)
         #        scene.render.filepath = fp + "_" + str(frame_nr).zfill(4)  # Set output path to avoid overwriting
                 bpy.ops.render.render(write_still=True)  # Render still image
             # Restore the original filepath
@@ -328,16 +368,11 @@ class SNA_OT_Export_Xdts_457Ec(bpy.types.Operator):
     bl_description = "Export Grease Pencils Data's first layer keyframes to XDTS"
     bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
     def execute(self, context):
-        GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
+        
         import json
         header = "" 
+        GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
         layers = GPData.split(',');
         layers_id = []
         dict = {}
@@ -346,6 +381,7 @@ class SNA_OT_Export_Xdts_457Ec(bpy.types.Operator):
         _tracks = {}
         _trackNo = layers_id
         timetables_data = []
+        
         #-------------------------
         #for x in bpy.data.objects:
         #    if x.type == "GREASEPENCIL":
@@ -377,7 +413,10 @@ class SNA_OT_Export_Xdts_457Ec(bpy.types.Operator):
                     tt = 0
                     k = {str(g.name) : []}
                     frames_list.append(k)
-                    for e in g.layers[0].frames:
+                    TargetLayerData = bpy.context.scene.sna_type_target_layer_data
+                    TLD = g.layers.get(TargetLayerData)
+                    
+                    for e in TLD.frames:
                         if e.keyframe_type == "KEYFRAME":
                             tt += 1
                             _frames = { "data": [{ "id": 0,"values": [str(tt)] }]}
@@ -415,94 +454,11 @@ class SNA_OT_Export_Xdts_457Ec(bpy.types.Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-
-class SNA_OT_Render_Layer_Keyframes_Svg_3543E(bpy.types.Operator):
-    bl_idname = "wm.render_layer_keyframes_svg_3543e"
-    bl_label = "Render Layer Keyframes (SVG)"
-    bl_description = "Only render current layer's keyframes in SVG format"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
-    def execute(self, context):
-        str_filename = bpy.context.scene.sna_frame_number_filenames
-        frames = []
-        scene = bpy.context.scene
-        obj = bpy.context.object
-        fp = scene.render.filepath  # Get existing output path
-        if obj.type == 'GREASEPENCIL':
-        #    print(obj.data.layers.active)
-            for i in obj.data.layers.active.frames:
-                path = bpy.context.blend_data.filepath
-                frames.append(int(i.frame_number))
-            filename_number = 0
-            for frame_nr in frames:
-                scene.frame_set(frame_nr)  # Set current frame to the desired frame
-                srf = ''
-                if str_filename == 'Counting Numbers':
-                    filename_number += 1
-                    srf = fp + str(filename_number) + ".svg"
-                elif str_filename == 'Layer name + Counting Numbers':
-                    filename_number += 1
-                    srf = fp + str(obj.data.name) + "_" + str(filename_number).zfill(4) + ".svg"
-                elif str_filename == 'Frame Numbers':
-                    srf = fp + str(frame_nr)
-                elif str_filename == 'Layer name + Frame Numbers':
-                    srf = fp + str(obj.data.name) + "_" + str(frame_nr).zfill(4) + ".svg"
-                bpy.ops.wm.grease_pencil_export_svg(
-                    filepath=srf, 
-                    check_existing=True, 
-                    filter_blender=False, 
-                    filter_backup=False, 
-                    filter_image=False, 
-                    filter_movie=False, 
-                    filter_python=False, 
-                    filter_font=False, 
-                    filter_sound=False, 
-                    filter_text=False, 
-                    filter_archive=False, 
-                    filter_btx=False, 
-                    filter_collada=False, 
-                    filter_alembic=False, 
-                    filter_usd=False, 
-                    filter_obj=True, 
-                    filter_volume=False, 
-                    filter_folder=True, 
-                    filter_blenlib=False, 
-        #            filemode=8, 
-                    display_type='DEFAULT', 
-        #            sort_method='', 
-                    use_fill=True, 
-                    selected_object_type='VISIBLE', 
-                    stroke_sample=0.0, 
-                    use_uniform_width=False, 
-                    use_clip_camera=False
-                    )
-            # Restore the original filepath
-            scene.render.filepath = fp
-        else:
-            self.report({'ERROR'}, 'Select a Grease Pencil Layer !')
-        return {"FINISHED"}
-
-    def invoke(self, context, event):
-        return self.execute(context)
-
-
 class SNA_OT_Set_To_Tga_Fd0A3(bpy.types.Operator):
     bl_idname = "wm.set_to_tga_fd0a3"
     bl_label = "Set to TGA"
     bl_description = "Set output setting to TGA"
     bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
 
     def execute(self, context):
         sc = bpy.context.scene
@@ -525,20 +481,15 @@ class SNA_OT_Render_All_Keyframes__B07Bc(bpy.types.Operator):
     bl_description = "Render All Keyframes from all GPData you typed"
     bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
     def execute(self, context):
-        GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
+        
         str_filename = bpy.context.scene.sna_frame_number_filenames
         skip_extreme = bpy.context.scene.sna_skip_extreme_type
         filepath = "//"
         abs_filepath = bpy.path.abspath(filepath) # returns the absolute path
         if not os.path.isdir(str(abs_filepath+"export")): # checks whether the directory exists
             os.mkdir(str(abs_filepath+"export")) # if it does not yet exist, makes it
+        GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
         layers = GPData.split(',');
         for l in layers:
             for a in bpy.data.objects:
@@ -549,7 +500,7 @@ class SNA_OT_Render_All_Keyframes__B07Bc(bpy.types.Operator):
                 scene = bpy.context.scene
                 if str_filename == 'Counting Numbers' or str_filename == 'Frame Numbers' :
                     filename = ''
-                elif str_filename == 'Layer name + Counting Numbers' or str_filename == 'Layer name + Frame Numbers' : 
+                elif str_filename == 'GP name + Counting Numbers' or str_filename == 'GP name + Frame Numbers' : 
                     filename = str(l)
                 fp = abs_filepath+"export"+"/"+str(l)+"/"+filename  # Get existing output path
                 frmt = scene.render.image_settings.file_format
@@ -559,16 +510,20 @@ class SNA_OT_Render_All_Keyframes__B07Bc(bpy.types.Operator):
                 else:
                     scene.render.image_settings.color_mode = 'RGB'
             for b in bpy.data.objects:  
-                frames = [] 
+                frames = []
+                
                 obj = bpy.data.objects[str(b.name)]
                 if obj.type == 'GREASEPENCIL':
-                #    print(obj.data.layers.active)
-                    for i in obj.data.layers.active.frames:
-                        if skip_extreme == True and i.keyframe_type == "EXTREME":
-                            pass
-                        else:
-                            path = bpy.context.blend_data.filepath
-                            frames.append(int(i.frame_number))
+                    # Get the target layer by name
+                    TargetLayerData = bpy.context.scene.sna_type_target_layer_data
+                    TLD = obj.data.layers.get(TargetLayerData)
+                    if TLD:  # Ensure the layer exists
+                        for frame in TLD.frames:
+                            if skip_extreme and frame.keyframe_type == "EXTREME":
+                                pass
+                            else:
+                                frames.append(frame.frame_number)
+
                     if obj.hide_render == False:
         #                print(frames)
                         filename_number = 0
@@ -579,12 +534,12 @@ class SNA_OT_Render_All_Keyframes__B07Bc(bpy.types.Operator):
                             if str_filename == 'Counting Numbers':
                                 filename_number += 1
                                 scene.render.filepath = abs_filepath+"export"+"/"+str(l)+"/"+str(filename_number)
-                            elif str_filename == 'Layer name + Counting Numbers':
+                            elif str_filename == 'GP name + Counting Numbers':
                                 filename_number += 1
-                                scene.render.filepath = fp + "_" + str(filename_number).zfill(4)
+                                scene.render.filepath = fp +  "_" + str(filename_number).zfill(4)
                             elif str_filename == 'Frame Numbers':
                                 scene.render.filepath = abs_filepath+"export"+"/"+str(l)+"/"+str(frame_nr)
-                            elif str_filename == 'Layer name + Frame Numbers':
+                            elif str_filename == 'GP name + Frame Numbers':
                                 scene.render.filepath = fp + "_" + str(frame_nr).zfill(4)
                             bpy.ops.render.render(write_still=True)  # Render still image
                         # Restore the original filepath
@@ -603,16 +558,11 @@ class SNA_OT_Add_Antialiasing_B88D6(bpy.types.Operator):
     bl_description = ""
     bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
     def execute(self, context):
         bpy.context.scene.grease_pencil_settings.antialias_threshold_render = 1.0
         bpy.context.scene.grease_pencil_settings.antialias_threshold = 1.0
         bpy.context.scene.render.dither_intensity = 1.0
+        bpy.context.scene.grease_pencil_settings.aa_samples = 8
         return {"FINISHED"}
 
     def invoke(self, context, event):
@@ -625,49 +575,15 @@ class SNA_OT_Remove_Antialiasing_Bb2Ae(bpy.types.Operator):
     bl_description = ""
     bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
     def execute(self, context):
         bpy.context.scene.grease_pencil_settings.antialias_threshold_render = 0.0
         bpy.context.scene.grease_pencil_settings.antialias_threshold = 0.0
         bpy.context.scene.render.dither_intensity = 0.0
+        bpy.context.scene.grease_pencil_settings.aa_samples = 1
         return {"FINISHED"}
 
     def invoke(self, context, event):
         return self.execute(context)
-
-
-#class SNA_OT_Open_Output_Folder001_5D731(bpy.types.Operator):
-#    bl_idname = "wm.open_output_folder001_5d731"
-#    bl_label = "Open Output Folder.001"
-#    bl_description = ""
-#    bl_options = {"REGISTER", "UNDO"}
-
-#    @classmethod
-#    def poll(cls, context):
-#        if bpy.app.version >= (3, 0, 0) and True:
-#            cls.poll_message_set('')
-#        return not False
-
-#    def execute(self, context):
-#        import os
-#        # Get the path of the currently open .blend file
-#        current_blend_file = bpy.data.filepath
-#        if current_blend_file:
-#            # Get the directory of the .blend file
-#            project_folder = os.path.dirname(current_blend_file)
-#            # Open the folder using external_operation
-#            bpy.ops.file.external_operation(filepath=project_folder, operation='FOLDER_OPEN')
-#        else:
-#            print("No .blend file is currently open.")
-#        return {"FINISHED"}
-
-#    def invoke(self, context, event):
-#        return self.execute(context)
 
 
 class SNA_OT_Set_To_Jpg_67847(bpy.types.Operator):
@@ -675,12 +591,6 @@ class SNA_OT_Set_To_Jpg_67847(bpy.types.Operator):
     bl_label = "Set to JPG"
     bl_description = "Set output setting to JPG"
     bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
 
     def execute(self, context):
         sc = bpy.context.scene
@@ -694,1065 +604,14 @@ class SNA_OT_Set_To_Jpg_67847(bpy.types.Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-
-#class SNA_OT_Open_Output_Folder_Ac060(bpy.types.Operator):
-#    bl_idname = "wm.open_output_folder_ac060"
-#    bl_label = "Open Output Folder"
-#    bl_description = ""
-#    bl_options = {"REGISTER", "UNDO"}
-
-#    @classmethod
-#    def poll(cls, context):
-#        if bpy.app.version >= (3, 0, 0) and True:
-#            cls.poll_message_set('')
-#        return not False
-
-#    def execute(self, context):
-#        import os
-#        # Get the path of the currently open .blend file
-#        sc = bpy.context.scene
-#        current_blend_file = bpy.data.filepath
-#        if current_blend_file:
-#            # Get the directory of the .blend file
-#            project_folder = sc.render.filepath
-#            # Open the folder using external_operation
-#            bpy.ops.file.external_operation(filepath=project_folder, operation='FOLDER_OPEN')
-#        else:
-#            print("No .blend file is currently open.")
-#        return {"FINISHED"}
-
-#    def invoke(self, context, event):
-#        return self.execute(context)
-
-
-class SNA_OT_Export_Opentoonz_647D7(bpy.types.Operator):
-    bl_idname = "wm.export_opentoonz_647d7"
-    bl_label = "Export Opentoonz"
-    bl_description = "Export Opentoonz Project File"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
-    def execute(self, context):
-        GPData = bpy.context.scene.sna_type_which_gp_to_renderexport
-        skip_extreme = bpy.context.scene.sna_skip_extreme_type
-        import xml.etree.ElementTree as ET
-        sc = bpy.context.scene
-        sc.render.image_settings.file_format = "TIFF"
-        if sc.render.film_transparent == True:
-            sc.render.image_settings.color_mode = "RGBA"
-        else :
-            sc.render.image_settings.color_mode = "RGBA"
-            sc.render.film_transparent = True
-        filepath = "//"
-        abs_filepath = bpy.path.abspath(filepath) # returns the absolute path
-        f_opentoonz = str(abs_filepath+"opentoonz")
-        f_drawings = str(abs_filepath+"opentoonz"+"/"+"drawings")
-        f_extras = str(abs_filepath+"opentoonz"+"/"+"extras")
-        f_inputs = str(abs_filepath+"opentoonz"+"/"+"inputs")
-        f_outputs = str(abs_filepath+"opentoonz"+"/"+"outputs")
-        f_palettes = str(abs_filepath+"opentoonz"+"/"+"palettes")
-        f_scenes = str(abs_filepath+"opentoonz"+"/"+"scenes")
-        f_scripts = str(abs_filepath+"opentoonz"+"/"+"scripts")
-        file_paths = [f_drawings,f_extras,f_inputs,f_outputs,f_palettes,f_scenes,f_scripts]
-
-        def xml_scenes():
-            for i in file_paths:
-                if not os.path.isdir(i): # checks whether the directory exists
-                    os.mkdir(i) # if it does not yet exist, makes it
-                    xml_content = """<parentProject type="projectFolder">".."</parentProject> """
-                    file_name = "scenes.xml"
-                    full_path = os.path.join(i, file_name)
-                    with open(full_path, "w", encoding="utf-8") as file:
-                        file.write(xml_content)
-
-        def xml_otprj():
-            xml_content = """<project>
-          <version>
-            70 1 
-          </version>
-          <folders>
-            <folder name="inputs" path="inputs"/>
-            <folder name="drawings" path="drawings"/>
-            <folder name="scenes" path="scenes"/>
-            <folder name="extras" path="extras"/>
-            <folder name="outputs" path="outputs"/>
-            <folder name="palettes" path="palettes"/>
-            <folder name="scripts" path="scripts"/>
-            </folders>
-          <sceneProperties>
-            <outputs>
-              <output name="main">
-                <range>
-                  0 -1 
-                </range>
-                <step>
-                  1 
-                </step>
-                <shrink>
-                  1 
-                </shrink>
-                <applyShrinkToViewer>
-                  0 
-                </applyShrinkToViewer>
-                <fps>
-                  24 
-                </fps>
-                <path>
-                  "+outputs/.tif"
-                </path>
-                <bpp>
-                  32 
-                </bpp>
-                <multimedia>
-                  0 
-                </multimedia>
-                <threadsIndex>
-                  2 
-                </threadsIndex>
-                <maxTileSizeIndex>
-                  0 
-                </maxTileSizeIndex>
-                <subcameraPrev>
-                  0 
-                </subcameraPrev>
-                <stereoscopic>
-                  0 0.05 
-                </stereoscopic>
-                <resquality>
-                  0 
-                </resquality>
-                <fieldprevalence>
-                  0 
-                </fieldprevalence>
-                <gamma>
-                  1 
-                </gamma>
-                <timestretch>
-                  25 25 
-                </timestretch>
-                <formatsProperties>
-                  <formatProperties ext="tif">
-                    <property name="Byte Ordering" type="enum" value="Mac">
-                      <item value="IBM PC"/>
-                      <item value="Mac"/>
-                      </property>
-                    <property name="Compression Type" type="enum" value="Lempel-Ziv and Welch encoding">
-                      <item value="Lempel-Ziv and Welch encoding"/>
-                      <item value="None"/>
-                      <item value="Macintosh Run-length encoding"/>
-                      <item value="ThunderScan Run-length encoding"/>
-                      <item value="CCITT Group 3 fax encoding"/>
-                      <item value="CCITT Group 4 fax encoding"/>
-                      <item value="CCITT modified Huffman Run-length encoding"/>
-                      <item value="JPEG compression"/>
-                      <item value="JPEG compression 6.0"/>
-                      <item value="SGILog"/>
-                      <item value="SGILog24"/>
-                      <item value="8"/>
-                      <item value="zip"/>
-                      <item value="Unknown"/>
-                      </property>
-                    <property name="Bits Per Pixel" type="enum" value="32(RGBM)">
-                      <item value="24(RGB)"/>
-                      <item value="48(RGB)"/>
-                      <item value=" 1(BW)"/>
-                      <item value=" 8(GREYTONES)"/>
-                      <item value="32(RGBM)"/>
-                      <item value="64(RGBM)"/>
-                      </property>
-                    <property name="Orientation" type="enum" value="Top Left">
-                      <item value="Top Left"/>
-                      <item value="Top Right"/>
-                      <item value="Bottom Right"/>
-                      <item value="Bottom Left"/>
-                      <item value="Left Top"/>
-                      <item value="Right Top"/>
-                      <item value="Right Bottom"/>
-                      <item value="Left Bottom"/>
-                      </property>
-                    </formatProperties>
-                  </formatsProperties>
-                </output>
-              <output name="preview">
-                <range>
-                  0 -1 
-                </range>
-                <step>
-                  1 
-                </step>
-                <shrink>
-                  1 
-                </shrink>
-                <applyShrinkToViewer>
-                  0 
-                </applyShrinkToViewer>
-                <fps>
-                  24 
-                </fps>
-                <path>
-                  "+outputs/.tif"
-                </path>
-                <bpp>
-                  32 
-                </bpp>
-                <syncColorSettings>
-                  1 
-                </syncColorSettings>
-                <multimedia>
-                  0 
-                </multimedia>
-                <threadsIndex>
-                  2 
-                </threadsIndex>
-                <maxTileSizeIndex>
-                  0 
-                </maxTileSizeIndex>
-                <subcameraPrev>
-                  0 
-                </subcameraPrev>
-                <stereoscopic>
-                  0 0.05 
-                </stereoscopic>
-                <resquality>
-                  0 
-                </resquality>
-                <fieldprevalence>
-                  0 
-                </fieldprevalence>
-                <gamma>
-                  1 
-                </gamma>
-                <timestretch>
-                  25 25 
-                </timestretch>
-                <formatsProperties>
-                  <formatProperties ext="tif">
-                    <property name="Byte Ordering" type="enum" value="Mac">
-                      <item value="IBM PC"/>
-                      <item value="Mac"/>
-                      </property>
-                    <property name="Compression Type" type="enum" value="Lempel-Ziv and Welch encoding">
-                      <item value="Lempel-Ziv and Welch encoding"/>
-                      <item value="None"/>
-                      <item value="Macintosh Run-length encoding"/>
-                      <item value="ThunderScan Run-length encoding"/>
-                      <item value="CCITT Group 3 fax encoding"/>
-                      <item value="CCITT Group 4 fax encoding"/>
-                      <item value="CCITT modified Huffman Run-length encoding"/>
-                      <item value="JPEG compression"/>
-                      <item value="JPEG compression 6.0"/>
-                      <item value="SGILog"/>
-                      <item value="SGILog24"/>
-                      <item value="8"/>
-                      <item value="zip"/>
-                      <item value="Unknown"/>
-                      </property>
-                    <property name="Bits Per Pixel" type="enum" value="32(RGBM)">
-                      <item value="24(RGB)"/>
-                      <item value="48(RGB)"/>
-                      <item value=" 1(BW)"/>
-                      <item value=" 8(GREYTONES)"/>
-                      <item value="32(RGBM)"/>
-                      <item value="64(RGBM)"/>
-                      </property>
-                    <property name="Orientation" type="enum" value="Top Left">
-                      <item value="Top Left"/>
-                      <item value="Top Right"/>
-                      <item value="Bottom Right"/>
-                      <item value="Bottom Left"/>
-                      <item value="Left Top"/>
-                      <item value="Right Top"/>
-                      <item value="Right Bottom"/>
-                      <item value="Left Bottom"/>
-                      </property>
-                    </formatProperties>
-                  </formatsProperties>
-                </output>
-              </outputs>
-            <cleanupParameters>
-              <cleanupCamera>
-                <cameraSize>
-                  16 9 
-                </cameraSize>
-                <cameraRes>
-                  1920 1080 
-                </cameraRes>
-                <cameraXPrevalence>
-                  1 
-                </cameraXPrevalence>
-                <interestRect>
-                  0 0 -1 -1 
-                </interestRect>
-                </cleanupCamera>
-              <cleanupPalette>
-                <version>
-                  71 0 
-                </version>
-                <styles>
-                  <style>
-                    color_0 3 255 255 255 0 
-                  </style>
-                  <style>
-                    color_1 2002 0 0 0 255 0 0 0 255 0 50 70 10 
-                  </style>
-                  </styles>
-                <stylepages>
-                  <page>
-                    <name>
-                      colors 
-                    </name>
-                    <indices>
-                      0 1 
-                    </indices>
-                    </page>
-                  </stylepages>
-                <shortcuts>
-                  -1 0 1 -1 -1 -1 -1 -1 -1 -1 
-                </shortcuts>
-                </cleanupPalette>
-              <lineProcessing autoAdjust="0" mode="grey" sharpness="90.000000"/>
-              <despeckling value="2"/>
-              <aaValue value="70"/>
-              <closestField value="999.000000"/>
-              <fdg name=""/>
-              <altBrightnessContrast>
-                0 50 
-              </altBrightnessContrast>
-              <lpNoneFormat>
-                tif 
-              </lpNoneFormat>
-              </cleanupParameters>
-            <scanParameters>
-              <paper fmt=""/>
-              </scanParameters>
-            <vectorizerParameters>
-              <version>
-                71 0 
-              </version>
-              <outline>
-                0 
-              </outline>
-              <visibilityBits>
-                -1 
-              </visibilityBits>
-              <Centerline>
-                <threshold>
-                  8 
-                </threshold>
-                <accuracy>
-                  9 
-                </accuracy>
-                <despeckling>
-                  5 
-                </despeckling>
-                <maxThickness>
-                  200 
-                </maxThickness>
-                <thicknessRatioFirst>
-                  100 
-                </thicknessRatioFirst>
-                <thicknessRatioLast>
-                  100 
-                </thicknessRatioLast>
-                <makeFrame>
-                  0 
-                </makeFrame>
-                <paintFill>
-                  0 
-                </paintFill>
-                <alignBoundaryStrokesDirection>
-                  0 
-                </alignBoundaryStrokesDirection>
-                <naaSource>
-                  0 
-                </naaSource>
-                </Centerline>
-              <Outline>
-                <despeckling>
-                  4 
-                </despeckling>
-                <accuracy>
-                  8 
-                </accuracy>
-                <adherence>
-                  50 
-                </adherence>
-                <angle>
-                  45 
-                </angle>
-                <relative>
-                  25 
-                </relative>
-                <maxColors>
-                  50 
-                </maxColors>
-                <toneThreshold>
-                  128 
-                </toneThreshold>
-                <transparentColor>
-                  255 255 255 255 
-                </transparentColor>
-                <paintFill>
-                  0 
-                </paintFill>
-                <alignBoundaryStrokesDirection>
-                  0 
-                </alignBoundaryStrokesDirection>
-                </Outline>
-              </vectorizerParameters>
-            <bgColor>
-              255 255 255 0 
-            </bgColor>
-            <markers>
-              6 0 
-            </markers>
-            <subsampling>
-              1 1 
-            </subsampling>
-            <fieldguide>
-              16 1.77778 
-            </fieldguide>
-            <noteColors>
-              255 235 140 255 255 160 120 255 255 180 190 255 135 205 250 255 145 240 145 255 130 255 210 255 150 245 255 255 
-            </noteColors>
-            </sceneProperties>
-          </project>"""
-            # Write the XML content to a file
-            file_name = "opentoonz_otprj.xml"
-            full_path = os.path.join(f_opentoonz, file_name)
-            with open(full_path, "w", encoding="utf-8") as file:
-                file.write(xml_content)
-        columns = ""
-        cells = ""
-        pegbars = ""
-        levels_path = ""
-        levels = ""
-        columnfxs = ""
-        xsheetfxs = ""
-        xsheetfxs2 = ""
-        outputfxs = ""
-
-        def xml_create_scene():
-            CONTENT = """<tnz framecount="""+'"'+str(bpy.context.scene.frame_end)+'"'+""" version="71.1">
-          <generator>
-            "OpenToonz 1.7.1"
-          </generator>
-          <properties>
-            <cameras>
-              <camera>
-                <cameraSize>
-                  16 9 
-                </cameraSize>
-                <cameraRes>
-                  1920 1080 
-                </cameraRes>
-                <cameraXPrevalence>
-                  1 
-                </cameraXPrevalence>
-                <interestRect>
-                  0 0 -1 -1 
-                </interestRect>
-                </camera>
-              </cameras>
-            <outputs>
-              <output name="main">
-                <range>
-                  0 -1 
-                </range>
-                <step>
-                  1 
-                </step>
-                <shrink>
-                  1 
-                </shrink>
-                <applyShrinkToViewer>
-                  0 
-                </applyShrinkToViewer>
-                <fps>
-                  24 
-                </fps>
-                <path>
-                  "+outputs/.tif"
-                </path>
-                <bpp>
-                  32 
-                </bpp>
-                <multimedia>
-                  0 
-                </multimedia>
-                <threadsIndex>
-                  2 
-                </threadsIndex>
-                <maxTileSizeIndex>
-                  0 
-                </maxTileSizeIndex>
-                <subcameraPrev>
-                  0 
-                </subcameraPrev>
-                <stereoscopic>
-                  0 0.05 
-                </stereoscopic>
-                <resquality>
-                  0 
-                </resquality>
-                <fieldprevalence>
-                  0 
-                </fieldprevalence>
-                <gamma>
-                  1 
-                </gamma>
-                <timestretch>
-                  25 25 
-                </timestretch>
-                <formatsProperties>
-                  <formatProperties ext="tif">
-                    <property name="Byte Ordering" type="enum" value="Mac">
-                      <item value="IBM PC"/>
-                      <item value="Mac"/>
-                      </property>
-                    <property name="Compression Type" type="enum" value="Lempel-Ziv and Welch encoding">
-                      <item value="Lempel-Ziv and Welch encoding"/>
-                      <item value="None"/>
-                      <item value="Macintosh Run-length encoding"/>
-                      <item value="ThunderScan Run-length encoding"/>
-                      <item value="CCITT Group 3 fax encoding"/>
-                      <item value="CCITT Group 4 fax encoding"/>
-                      <item value="CCITT modified Huffman Run-length encoding"/>
-                      <item value="JPEG compression"/>
-                      <item value="JPEG compression 6.0"/>
-                      <item value="SGILog"/>
-                      <item value="SGILog24"/>
-                      <item value="8"/>
-                      <item value="zip"/>
-                      <item value="Unknown"/>
-                      </property>
-                    <property name="Bits Per Pixel" type="enum" value="32(RGBM)">
-                      <item value="24(RGB)"/>
-                      <item value="48(RGB)"/>
-                      <item value=" 1(BW)"/>
-                      <item value=" 8(GREYTONES)"/>
-                      <item value="32(RGBM)"/>
-                      <item value="64(RGBM)"/>
-                      </property>
-                    <property name="Orientation" type="enum" value="Top Left">
-                      <item value="Top Left"/>
-                      <item value="Top Right"/>
-                      <item value="Bottom Right"/>
-                      <item value="Bottom Left"/>
-                      <item value="Left Top"/>
-                      <item value="Right Top"/>
-                      <item value="Right Bottom"/>
-                      <item value="Left Bottom"/>
-                      </property>
-                    </formatProperties>
-                  </formatsProperties>
-                </output>
-              <output name="preview">
-                <range>
-                  0 -1 
-                </range>
-                <step>
-                  1 
-                </step>
-                <shrink>
-                  1 
-                </shrink>
-                <applyShrinkToViewer>
-                  0 
-                </applyShrinkToViewer>
-                <fps>
-                  24 
-                </fps>
-                <path>
-                  "+outputs/.tif"
-                </path>
-                <bpp>
-                  32 
-                </bpp>
-                <syncColorSettings>
-                  1 
-                </syncColorSettings>
-                <multimedia>
-                  0 
-                </multimedia>
-                <threadsIndex>
-                  2 
-                </threadsIndex>
-                <maxTileSizeIndex>
-                  0 
-                </maxTileSizeIndex>
-                <subcameraPrev>
-                  0 
-                </subcameraPrev>
-                <stereoscopic>
-                  0 0.05 
-                </stereoscopic>
-                <resquality>
-                  0 
-                </resquality>
-                <fieldprevalence>
-                  0 
-                </fieldprevalence>
-                <gamma>
-                  1 
-                </gamma>
-                <timestretch>
-                  25 25 
-                </timestretch>
-                <formatsProperties>
-                  <formatProperties ext="tif">
-                    <property name="Byte Ordering" type="enum" value="Mac">
-                      <item value="IBM PC"/>
-                      <item value="Mac"/>
-                      </property>
-                    <property name="Compression Type" type="enum" value="Lempel-Ziv and Welch encoding">
-                      <item value="Lempel-Ziv and Welch encoding"/>
-                      <item value="None"/>
-                      <item value="Macintosh Run-length encoding"/>
-                      <item value="ThunderScan Run-length encoding"/>
-                      <item value="CCITT Group 3 fax encoding"/>
-                      <item value="CCITT Group 4 fax encoding"/>
-                      <item value="CCITT modified Huffman Run-length encoding"/>
-                      <item value="JPEG compression"/>
-                      <item value="JPEG compression 6.0"/>
-                      <item value="SGILog"/>
-                      <item value="SGILog24"/>
-                      <item value="8"/>
-                      <item value="zip"/>
-                      <item value="Unknown"/>
-                      </property>
-                    <property name="Bits Per Pixel" type="enum" value="32(RGBM)">
-                      <item value="24(RGB)"/>
-                      <item value="48(RGB)"/>
-                      <item value=" 1(BW)"/>
-                      <item value=" 8(GREYTONES)"/>
-                      <item value="32(RGBM)"/>
-                      <item value="64(RGBM)"/>
-                      </property>
-                    <property name="Orientation" type="enum" value="Top Left">
-                      <item value="Top Left"/>
-                      <item value="Top Right"/>
-                      <item value="Bottom Right"/>
-                      <item value="Bottom Left"/>
-                      <item value="Left Top"/>
-                      <item value="Right Top"/>
-                      <item value="Right Bottom"/>
-                      <item value="Left Bottom"/>
-                      </property>
-                    </formatProperties>
-                  </formatsProperties>
-                </output>
-              </outputs>
-            <cleanupParameters>
-              <cleanupCamera>
-                <cameraSize>
-                  16 9 
-                </cameraSize>
-                <cameraRes>
-                  1920 1080 
-                </cameraRes>
-                <cameraXPrevalence>
-                  1 
-                </cameraXPrevalence>
-                <interestRect>
-                  0 0 -1 -1 
-                </interestRect>
-                </cleanupCamera>
-              <cleanupPalette>
-                <version>
-                  71 0 
-                </version>
-                <styles>
-                  <style>
-                    color_0 3 255 255 255 0 
-                  </style>
-                  <style>
-                    color_1 2002 0 0 0 255 0 0 0 255 0 50 70 10 
-                  </style>
-                  </styles>
-                <stylepages>
-                  <page>
-                    <name>
-                      colors 
-                    </name>
-                    <indices>
-                      0 1 
-                    </indices>
-                    </page>
-                  </stylepages>
-                <shortcuts>
-                  -1 0 1 -1 -1 -1 -1 -1 -1 -1 
-                </shortcuts>
-                </cleanupPalette>
-              <lineProcessing autoAdjust="0" mode="grey" sharpness="90.000000"/>
-              <despeckling value="2"/>
-              <aaValue value="70"/>
-              <closestField value="999.000000"/>
-              <fdg name=""/>
-              <altBrightnessContrast>
-                0 50 
-              </altBrightnessContrast>
-              <lpNoneFormat>
-                tif 
-              </lpNoneFormat>
-              </cleanupParameters>
-            <scanParameters>
-              <paper fmt=""/>
-              </scanParameters>
-            <vectorizerParameters>
-              <version>
-                71 0 
-              </version>
-              <outline>
-                0 
-              </outline>
-              <visibilityBits>
-                -1 
-              </visibilityBits>
-              <Centerline>
-                <threshold>
-                  8 
-                </threshold>
-                <accuracy>
-                  9 
-                </accuracy>
-                <despeckling>
-                  5 
-                </despeckling>
-                <maxThickness>
-                  200 
-                </maxThickness>
-                <thicknessRatioFirst>
-                  100 
-                </thicknessRatioFirst>
-                <thicknessRatioLast>
-                  100 
-                </thicknessRatioLast>
-                <makeFrame>
-                  0 
-                </makeFrame>
-                <paintFill>
-                  0 
-                </paintFill>
-                <alignBoundaryStrokesDirection>
-                  0 
-                </alignBoundaryStrokesDirection>
-                <naaSource>
-                  0 
-                </naaSource>
-                </Centerline>
-              <Outline>
-                <despeckling>
-                  4 
-                </despeckling>
-                <accuracy>
-                  8 
-                </accuracy>
-                <adherence>
-                  50 
-                </adherence>
-                <angle>
-                  45 
-                </angle>
-                <relative>
-                  25 
-                </relative>
-                <maxColors>
-                  50 
-                </maxColors>
-                <toneThreshold>
-                  128 
-                </toneThreshold>
-                <transparentColor>
-                  255 255 255 255 
-                </transparentColor>
-                <paintFill>
-                  0 
-                </paintFill>
-                <alignBoundaryStrokesDirection>
-                  0 
-                </alignBoundaryStrokesDirection>
-                </Outline>
-              </vectorizerParameters>
-            <bgColor>
-              255 255 255 0 
-            </bgColor>
-            <markers>
-              6 0 
-            </markers>
-            <subsampling>
-              1 1 
-            </subsampling>
-            <fieldguide>
-              16 1.77778 
-            </fieldguide>
-            <noteColors>
-              255 235 140 255 255 160 120 255 255 180 190 255 135 205 250 255 145 240 145 255 130 255 210 255 150 245 255 255 
-            </noteColors>
-            </properties>
-          <levelSet>
-            <levels>
-              """+levels_path+"""
-            </levels>
-            <folder name="Cast" type="default">
-              <levels>
-                """+ levels +"""
-              </levels>
-              </folder>
-            <folder name="Audio">
-              </folder>
-            </levelSet>
-          <xsheet>
-            <columns>
-            """+columns+"""
-            </columns>
-            <pegbars>
-              <pegbar activeboth="yes" id="Camera1">
-                <parent handle="B" id="None" parentHandle="B">
-                  </parent>
-                <isOpened>
-                  0 
-                </isOpened>
-                <center>
-                  0 0 0 0 
-                </center>
-                <status>
-                  0 
-                </status>
-                <sx>
-                  <default>
-                    1 
-                  </default>
-                  </sx>
-                <sy>
-                  <default>
-                    1 
-                  </default>
-                  </sy>
-                <sc>
-                  <default>
-                    1 
-                  </default>
-                  </sc>
-                <nodePos>
-                  1.234e+09 5.678e+09 
-                </nodePos>
-                <camera>
-                  <cameraSize>
-                    16 9 
-                  </cameraSize>
-                  <cameraRes>
-                    1920 1080 
-                  </cameraRes>
-                  <cameraXPrevalence>
-                    1 
-                  </cameraXPrevalence>
-                  <interestRect>
-                    0 0 -1 -1 
-                  </interestRect>
-                  </camera>
-                </pegbar>
-              <pegbar id="Table">
-                <parent handle="B" id="None" parentHandle="B">
-                  </parent>
-                <isOpened>
-                  0 
-                </isOpened>
-                <center>
-                  0 0 0 0 
-                </center>
-                <status>
-                  0 
-                </status>
-                <sx>
-                  <default>
-                    1 
-                  </default>
-                  </sx>
-                <sy>
-                  <default>
-                    1 
-                  </default>
-                  </sy>
-                <sc>
-                  <default>
-                    1 
-                  </default>
-                  </sc>
-                <nodePos>
-                  1.234e+09 5.678e+09 
-                </nodePos>
-                </pegbar>
-              """+pegbars+"""
-              <grid_dimension>
-                1 
-              </grid_dimension>
-              </pegbars>
-            <fxnodes>
-              <terminal>
-                  """+columnfxs+"""
-                </terminal>
-              <xsheet>
-                """+xsheetfxs+"""
-                  <params>
-                    </params>
-                  <ports>
-                    </ports>
-                  <numberId>
-                    0 
-                  </numberId>
-                  <name>
-                    Xsheet 
-                  </name>
-                  <fxId>
-                    "" 
-                  </fxId>
-                  <opened>
-                    0 
-                  </opened>
-                </Toonz_xsheetFx>
-              </xsheet>
-              <output>
-                """+outputfxs+"""
-                  <params>
-                    </params>
-                  <ports>
-                    <source>
-                      """+xsheetfxs2+"""
-                    </source>
-                    </ports>
-                  <numberId>
-                    0 
-                  </numberId>
-                  <name>
-                    Output 
-                  </name>
-                  <fxId>
-                    "" 
-                  </fxId>
-                  <opened>
-                    0 
-                  </opened>
-                </Toonz_outputFx>
-              </output>
-              <grid_dimension>
-                1 
-              </grid_dimension>
-              </fxnodes>
-            </xsheet>
-          <history>
-            "| #    DATE:       Time:   MACHINE:    USER:           |"
-            "| #1   28 Oct 25   15:24                |"
-          </history>
-          </tnz>"""
-            f_name = "scene.tnz"
-            filename = os.path.join(f_scenes, f_name)
-            with open(filename, "w", encoding="utf-8", newline="\n") as f:
-                f.write(CONTENT) 
-        if not os.path.isdir(f_opentoonz): # checks whether the directory exists
-            os.mkdir(f_opentoonz) # if it does not yet exist, makes it
-            layers = GPData.split(',');
-            nb = 2
-            nb_ = -1
-            nbb = 3
-            for l in layers:
-                nb_ += 1
-                nb+=1 + nb_
-                nbb+=1 + nb_
-                levelz_path = str("<level id='"+str(layers.index(l)+1)+"'>"+str(l)+"<info dpix='"+str(120.000000)+"' dpiy='"+str(120.000000)+"'/><path>"+'"'+"+extras/"+str(l)+"..tif"+'"'+"</path></level>")
-                levels_path += levelz_path
-                levelz = str("<level id='"+str(layers.index(l)+1)+"'/>")
-                levels += levelz
-                ##
-                pegbarz = str("<pegbar id="+'"'+"Col"+str(layers.index(l)+1)+'"'+"><parent handle="+'"B"'+" id="+'"Table"'+" parentHandle="+'"B"'+"></parent><name>"+str(l)+"</name><isOpened>0</isOpened><center>0 0 0 0</center><status>0</status><sx><default>1</default></sx><sy><default>1</default></sy><sc><default>1</default></sc><nodePos>1.234e+09 5.678e+09</nodePos></pegbar>")
-                pegbars += pegbarz
-                columnfxz = str("<fxnode><Toonz_columnFx id='"+str(nbb)+"'/></fxnode>")
-                columnfxs += columnfxz
-                xsheetfxz = str("<Toonz_xsheetFx id='"+str(nbb + 1)+"'>")
-                xsheetfxs = xsheetfxz
-                outputfxz = str("<Toonz_outputFx id='"+str(nbb + 2)+"'>")
-                outputfxs = outputfxz
-                xsheetfxz2 = str("<Toonz_xsheetFx id='"+str(nbb + 1)+"'/>")
-                xsheetfxs2 = xsheetfxz2
-        #        for a in bpy.data.objects:
-                for b in layers:
-                    bpy.data.objects[str(b)].hide_render = True
-                bpy.data.objects[str(l)].hide_render = False
-                scene = bpy.context.scene
-                fp = abs_filepath+"opentoonz"+"/"+"extras"+"/"  # Get existing output path
-        #        for b in bpy.data.objects:
-                frames = []
-                frames_key = []
-                frames_extreme = []
-        #            obj = bpy.data.objects[str(b.name)]
-                obj = bpy.data.objects[str(l)]
-        #            if obj.type == 'GREASEPENCIL':
-                for i in obj.data.layers.active.frames:
-                    if skip_extreme == True and i.keyframe_type == "EXTREME":
-                        frames_extreme.append(int(i.frame_number))
-                    else:
-                        frames_key.append(int(i.frame_number))
-                    path = bpy.context.blend_data.filepath
-                    frames.append(int(i.frame_number))
-                number = 0
-                if obj.hide_render == False:
-        #                print(frames)
-                    filename_number = 0
-                    print(frames_key)
-                    for frame_nr in frames_key:
-                        scene.frame_set(frame_nr)  # Set current frame to the desired frame
-                        filename_number += 1
-                        scene.render.filepath = fp + str(l) + "." + str(filename_number).zfill(4)
-                        bpy.ops.render.render(write_still=True)  # Render still image
-                    scene.render.filepath = fp
-                    for idx, elem in enumerate(frames):
-                        this_elem = elem
-                        next_elem = frames[(idx + 1) % len(frames)]
-                        last_elem = frames[-1]
-                        if this_elem in frames_key:
-                            number += 1 
-                        else:pass
-                        x = str(number).zfill(4)
-                        a = this_elem-1
-                        bn = next_elem
-                        b =  (bn - a) - 1
-                        endn = bpy.context.scene.frame_end
-                        end = (endn - a) -1
-                        if this_elem == last_elem :
-                            cellz = str("<cell>"+str(a)+" "+str(end)+" "+"<level id='"+str(layers.index(l)+1)+"'/>"+x+" "+"0"+" </cell>")
-                            cells += cellz
-                        elif this_elem in frames_extreme:
-                            pass
-                        else:
-                            cellz = str("<cell>"+str(a)+" "+str(b)+" "+"<level id='"+str(layers.index(l)+1)+"'/>"+x+" "+"0"+" </cell>")
-                            cells += cellz
-                else:
-                    pass
-                columnz = str("<levelColumn id='"+str(nb)+"'><status>0</status><cells>"+str(cells)+"</cells><fx><Toonz_columnFx id='"+str(nbb)+"'><params></params><ports></ports><numberId>0 </numberId><name>LevelColumn </name><fxId>"+'""'+"</fxId><opened>0</opened></Toonz_columnFx></fx></levelColumn>")
-                columns += columnz  
-                cells = ""
-            xml_otprj()
-            xml_scenes()
-            xml_create_scene()
-        return {"FINISHED"}
-
-    def invoke(self, context, event):
-        return self.execute(context)
-
-
-    
 def register():
     
     bpy.types.Scene.sna_camera_action_1_name = bpy.props.StringProperty(name='Camera Action 1 Name', description='', default='CameraAction', subtype='NONE', maxlen=0)
     bpy.types.Scene.sna_camera_action_2_name = bpy.props.StringProperty(name='Camera Action 2 Name', description='', default='CameraOverscan', subtype='NONE', maxlen=0)
     bpy.types.Scene.sna_toggle_overscan_as_well = bpy.props.BoolProperty(name='Toggle Overscan as well', description='', default=True)
-    bpy.types.Scene.sna_type_which_gp_to_renderexport = bpy.props.StringProperty(name='Type which GP to render/export', description='', default='A,B,C', subtype='NONE', maxlen=0)
-    bpy.types.Scene.sna_frame_number_filenames = bpy.props.EnumProperty(name='Frame number filenames', description='', items=[('Counting Numbers', 'Counting Numbers', '', 0, 0), ('Layer name + Counting Numbers', 'Layer name + Counting Numbers', '', 0, 1), ('Frame Numbers', 'Frame Numbers', '', 0, 2), ('Layer name + Frame Numbers', 'Layer name + Frame Numbers', '', 0, 3)])
+    bpy.types.Scene.sna_type_target_layer_data = bpy.props.StringProperty(name='Target Layer Data', description='Type which layer name as target to export its keyframe data', default='data', subtype='NONE', maxlen=0)
+    bpy.types.Scene.sna_type_which_gp_to_renderexport = bpy.props.StringProperty(name='Target Grease Pencils', description='Type which GP to render/export', default='A,B,C', subtype='NONE', maxlen=0)
+    bpy.types.Scene.sna_frame_number_filenames = bpy.props.EnumProperty(name='Frame number filenames', description='', items=[('Counting Numbers', 'Counting Numbers', '', 0, 0), ('GP name + Counting Numbers', 'GP name + Counting Numbers', '', 0, 1), ('Frame Numbers', 'Frame Numbers', '', 0, 2), ('GP name + Frame Numbers', 'GP name + Frame Numbers', '', 0, 3)])
     bpy.types.Scene.sna_skip_extreme_type = bpy.props.BoolProperty(name='Skip Extreme Type', description='', default=False)
     bpy.utils.register_class(SNA_PT_menu_6D4CE)
     bpy.utils.register_class(SNA_OT_Set_To_Mp4_4Fc1E)
@@ -1760,18 +619,16 @@ def register():
     bpy.utils.register_class(SNA_OT_Set_To_Png_9C466)
     bpy.utils.register_class(SNA_OT_Render_Layer_Keyframes_Default_Ec843)
     bpy.utils.register_class(SNA_OT_Export_Xdts_457Ec)
-#    bpy.utils.register_class(SNA_OT_Render_Layer_Keyframes_Svg_3543E)
     bpy.utils.register_class(SNA_OT_Set_To_Tga_Fd0A3)
     bpy.utils.register_class(SNA_OT_Render_All_Keyframes__B07Bc)
     bpy.utils.register_class(SNA_OT_Add_Antialiasing_B88D6)
     bpy.utils.register_class(SNA_OT_Remove_Antialiasing_Bb2Ae)
-#    bpy.utils.register_class(SNA_OT_Open_Output_Folder001_5D731)
     bpy.utils.register_class(SNA_OT_Set_To_Jpg_67847)
-#    bpy.utils.register_class(SNA_OT_Open_Output_Folder_Ac060)
-    bpy.utils.register_class(SNA_OT_Export_Opentoonz_647D7)
+    bpy.utils.register_class(SNA_Copy_Text_Commands)
 def unregister():
     del bpy.types.Scene.sna_skip_extreme_type
     del bpy.types.Scene.sna_frame_number_filenames
+    del bpy.types.Scene.sna_type_target_layer_data
     del bpy.types.Scene.sna_type_which_gp_to_renderexport
     del bpy.types.Scene.sna_show_brush_size_converter_pixel_to_meter
     del bpy.types.Scene.sna_brush_size
@@ -1791,14 +648,11 @@ def unregister():
     bpy.utils.unregister_class(SNA_OT_Set_To_Png_9C466)
     bpy.utils.unregister_class(SNA_OT_Render_Layer_Keyframes_Default_Ec843)
     bpy.utils.unregister_class(SNA_OT_Export_Xdts_457Ec)
-#    bpy.utils.unregister_class(SNA_OT_Render_Layer_Keyframes_Svg_3543E)
     bpy.utils.unregister_class(SNA_OT_Set_To_Tga_Fd0A3)
     bpy.utils.unregister_class(SNA_OT_Render_All_Keyframes__B07Bc)
     bpy.utils.unregister_class(SNA_OT_Add_Antialiasing_B88D6)
     bpy.utils.unregister_class(SNA_OT_Remove_Antialiasing_Bb2Ae)
-#    bpy.utils.unregister_class(SNA_OT_Open_Output_Folder001_5D731)
     bpy.utils.unregister_class(SNA_OT_Set_To_Jpg_67847)
-#    bpy.utils.unregister_class(SNA_OT_Open_Output_Folder_Ac060)
-    bpy.utils.unregister_class(SNA_OT_Export_Opentoonz_647D7)
+    bpy.utils.unregister_class(SNA_Copy_Text_Commands)
 if __name__ == "__main__":
     register()
