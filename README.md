@@ -1,1 +1,1 @@
-Also available on Gumroad : https://sadewoo.gumroad.com/l/SakugaGP
+Main page : https://spikysaurus.github.io/pages/SakugaGP/index.html
